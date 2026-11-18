@@ -8,13 +8,14 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 03: `bh init` (registry, repo home layout, agent-folder builder) and `bh doctor`.
+- Unit 04: herdr adapter in `bh` (clean-env server start, workspace/tab/pane by id) and `bh` attach that starts the orchestrator in the `orch` tab.
 
 ## Completed
 
 - Design spec: per-repo orchestrator, layout, `bh` command surface, orchestrator contract and dispatch policy, crew lifecycle and status protocol, plan ingress and triage, repo context, away-mode, persistence, Rust implementation plan, build order.
 - Unit 01: Cargo workspace (`bh-core`, `bhd`, `bh`), `rust-toolchain.toml` pinned to 1.99.1, domain types (ids, time, `StatusVerb`, `PaneState`, `Event`, `Wake`/`WakeRecord`/`WakeKind`, `Task`, `Registry`/`RepoConfig`), versioned `bhd` ↔ extension protocol (`Envelope`, `ProtocolError`), serde round-trip tests. Spec: `specs/01-cargo-workspace.md`.
 - Unit 02: `StatusLine`/`StatusLine::parse` with typed errors, `SupervisionState`/`RepoState`/`TaskState`, pure `classify(state, event)` with wake rules, status fixtures, parser and classifier tests. Spec: `specs/02-status-classifier.md`.
+- Unit 03: `bh` lib+bin split; `bh init` (git detection, slug, registry, repo home, generated `config.toml`/`settings.json`/`mcp.json`, global symlinks); `bh doctor` (registry, config, JSON, broken symlinks, stray `AGENTS.md`); temp-home integration tests. `RegistryEntry.workspace` is now `Option`. Spec: `specs/03-init-agent-folder.md`.
 
 ## In Progress
 
@@ -22,7 +23,7 @@ Update this file after every meaningful implementation change.
 
 ## Next Up
 
-- Unit 03: `bh init`, repo home layout, agent-folder builder, `bh doctor`.
+- Unit 04: herdr adapter and `bh` attach.
 
 ## Open Questions
 
@@ -39,6 +40,10 @@ Update this file after every meaningful implementation change.
 - Confirm `rebase_after = 1h`; the context names the setting but gives no value.
 - Does bulkhead need an explicit "pane gone" state, or does herdr signal pane closure separately from the five agent states?
 - Should `StatusVerb::Unknown` wake the orchestrator (protocol drift is worth knowing) or stay silent to avoid noise from forward-compatible crew builds?
+- Unit 03 observed Pi 1.5.0: `~/.pi/agent` has no `AGENTS.md`, `models.json` or `themes/`, and carries `models-store.json` instead; the builder links only sources that exist, so those links are legitimately absent. Confirm this is the right behavior when a global file appears later (`bh doctor` warns).
+- Generated per-repo `settings.json` is seeded with the global `defaultProvider`/`defaultModel` because Pi reads the whole global layer from `PI_CODING_AGENT_DIR` and settings is generated, not symlinked. Confirm this inheritance is intended.
+- `bh doctor`'s "stray AGENTS.md" check currently means an `AGENTS.md` in the repo agent folder that is a regular file rather than a symlink. Confirm that matches the intended check.
+- `BULKHEAD_HOME` and `BULKHEAD_AGENT_DIR` are the env overrides used for tests and relocation; decide whether to document them as public.
 
 ## Architecture Decisions
 
@@ -59,3 +64,5 @@ Update this file after every meaningful implementation change.
 - Unit 01 landed. The repo was not a git checkout, so no commit was made; the captain owns `git init`. `rust-toolchain.toml` pins 1.99.1, installed on first build. `bh-core` ids use one `string_id!` macro for eight newtypes; flagged for review against the "no macro tricks" standard.
 - Unit 01 review points: `WakeKind` members, `rebase_after` default, and the protocol envelope shape (no `flatten`, so messages nest under `"message"`).
 - Unit 02 landed. `Event::StatusLine` and `Event::PlanArrived` gained an `at: Timestamp` so `classify` can stamp wakes without reading a clock; no other Unit 01 shape changed. Wake ids are deterministic (`w-1`, `w-2`, …) from a counter in `SupervisionState`, seeded by `bhd` from `wakes.jsonl` on restart. Unknown status verbs update state but do not wake; flagged as an open question.
+- Unit 03 landed. `bh` is a lib+bin crate so integration tests can drive `init`/`doctor`; `BulkheadPaths` is injected, never discovered in tests. `bh init` links only present global files and generates per-repo `settings.json`/`mcp.json`; `bh doctor` reports errors but does not mutate. A manual CLI run against a temp home passed (`demo-repo` registered, doctor clean).
+- Unit 03 changed the Unit 01 `RegistryEntry.workspace` field to `Option<WorkspaceId>` (init runs before the herdr adapter exists). Flagged for review.

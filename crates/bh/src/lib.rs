@@ -1,0 +1,15 @@
+//! `bh` library surface.
+//!
+//! The binary is a thin wrapper over [`cli::run`]. Keeping the logic in a
+//! library lets integration tests drive `init` and `doctor` against temporary
+//! homes without spawning the CLI.
+
+pub mod agent_folder;
+pub mod cli;
+pub mod doctor;
+pub mod fsx;
+pub mod home;
+pub mod init;
+pub mod paths;
+pub mod registry;
+pub mod repo;

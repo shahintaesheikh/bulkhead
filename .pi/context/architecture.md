@@ -34,7 +34,7 @@
 
 All state is plain files under `~/.bulkhead/`; there is no database.
 
-- **`registry.toml`**: repo id → repo path, origin URL, herdr workspace id, delivery mode.
+- **`registry.toml`**: repo id → repo path, origin URL, herdr workspace id (absent until the first attach creates the workspace, Unit 04), delivery mode.
 - **`shared/`**: one copy of opt-in skills and extensions, linked into repos by name.
 - **`<repo-id>/config.toml`**: per-repo settings (`delivery`, `max_crew`, `stall_after`, `rebase_after`, away policy, opted-in shared skills, optional `+yolo`).
 - **`<repo-id>/agent/`**: the repo's `PI_CODING_AGENT_DIR`. Symlinks for `AGENTS.md`, `auth.json`, `models.json` and `themes/` into `~/.pi/agent`; generated `settings.json` and `mcp.json`; per-repo `skills/`, `extensions/`, `prompts/`.

@@ -24,8 +24,10 @@ pub struct RegistryEntry {
     /// Origin remote URL, if the repo has one.
     #[serde(default)]
     pub origin: Option<String>,
-    /// herdr workspace bound to this repo.
-    pub workspace: WorkspaceId,
+    /// herdr workspace bound to this repo; `None` until the first attach
+    /// creates it (Unit 04).
+    #[serde(default)]
+    pub workspace: Option<WorkspaceId>,
     /// How finished work reaches main.
     #[serde(default)]
     pub delivery: DeliveryMode,

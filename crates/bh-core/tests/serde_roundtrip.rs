@@ -88,7 +88,7 @@ fn registry_round_trips_through_toml() {
         RegistryEntry {
             path: PathBuf::from("/Users/captain/bulkhead"),
             origin: Some("git@github.com:captain/bulkhead.git".to_owned()),
-            workspace: WorkspaceId::from("w1"),
+            workspace: Some(WorkspaceId::from("w1")),
             delivery: DeliveryMode::NoMistakes,
         },
     );
