@@ -2,18 +2,21 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
-use bh_core::TaskId;
+use anyhow::{Context, Result, bail};
+use bh_core::{PlanId, TaskId, TriageState};
 use clap::{Parser, Subcommand};
 
 use crate::attach;
+use crate::backlog;
 use crate::delivery::{self, Landers};
 use crate::doctor::{self, Level};
 use crate::ghaxi::GhAxi;
 use crate::herdr::Herdr;
 use crate::init;
+use crate::lavish::LavishAxi;
 use crate::no_mistakes::NoMistakes;
 use crate::paths::BulkheadPaths;
+use crate::plan;
 use crate::repo;
 use crate::task;
 use crate::treehouse::Treehouse;
@@ -74,6 +77,34 @@ pub enum Command {
         #[arg(long)]
         approve: bool,
     },
+    /// Add a plan to the inbox, or triage plans.
+    Plan {
+        /// Path to the plan file to ingest.
+        path: Option<PathBuf>,
+        /// List plans and their triage state.
+        #[arg(long)]
+        list: bool,
+        /// Accept a plan by id.
+        #[arg(long)]
+        accept: Option<String>,
+        /// Decline a plan by id.
+        #[arg(long)]
+        decline: Option<String>,
+        /// Supersede a plan by id.
+        #[arg(long)]
+        supersede: Option<String>,
+        /// Reason for a decline or supersede.
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Create a backlog item from an ask.
+    Task {
+        /// The ask. Omit with --list.
+        ask: Option<String>,
+        /// List backlog items.
+        #[arg(long)]
+        list: bool,
+    },
 }
 
 /// Parses arguments and runs the selected command.
@@ -88,6 +119,15 @@ pub fn run() -> Result<()> {
         Some(Command::Status { task_id }) => run_status(task_id.as_deref()),
         Some(Command::Teardown { task_id }) => run_teardown(&task_id),
         Some(Command::Land { task_id, approve }) => run_land(&task_id, approve),
+        Some(Command::Plan {
+            path,
+            list,
+            accept,
+            decline,
+            supersede,
+            reason,
+        }) => run_plan(path.as_deref(), list, accept, decline, supersede, reason),
+        Some(Command::Task { ask, list }) => run_task(ask.as_deref(), list),
         None => run_attach(Path::new(".")),
     }
 }
@@ -125,7 +165,7 @@ fn run_doctor() -> Result<()> {
     }
 
     if errors > 0 {
-        anyhow::bail!("{errors} error(s) found");
+        bail!("{errors} error(s) found");
     }
     Ok(())
 }
@@ -213,6 +253,88 @@ fn run_land(task_id: &str, approve: bool) -> Result<()> {
         "landed {} ({:?}) -> {}",
         report.task_id, report.mode, report.reference
     );
+    Ok(())
+}
+
+fn run_plan(
+    path: Option<&Path>,
+    list: bool,
+    accept: Option<String>,
+    decline: Option<String>,
+    supersede: Option<String>,
+    reason: Option<String>,
+) -> Result<()> {
+    let paths = BulkheadPaths::discover()?;
+    let repo = repo::detect(Path::new("."))?;
+
+    if list {
+        for plan in plan::list(&paths, &repo.id)? {
+            println!("{} [{}] {}", plan.id, plan.state.as_token(), plan.title);
+        }
+        return Ok(());
+    }
+
+    if let Some(id) = accept {
+        let plan = plan::set_state(
+            &paths,
+            &repo.id,
+            &PlanId::from(id),
+            TriageState::Accepted,
+            None,
+        )?;
+        println!("accepted {} ({})", plan.id, plan.file);
+        return Ok(());
+    }
+    if let Some(id) = decline {
+        let plan = plan::set_state(
+            &paths,
+            &repo.id,
+            &PlanId::from(id),
+            TriageState::Declined,
+            reason,
+        )?;
+        println!("declined {} ({})", plan.id, plan.file);
+        return Ok(());
+    }
+    if let Some(id) = supersede {
+        let plan = plan::set_state(
+            &paths,
+            &repo.id,
+            &PlanId::from(id),
+            TriageState::Superseded,
+            reason,
+        )?;
+        println!("superseded {} ({})", plan.id, plan.file);
+        return Ok(());
+    }
+
+    if let Some(path) = path {
+        let lavish = LavishAxi::from_env();
+        let plan = plan::ingest(&paths, &repo.id, path, Some(&lavish))?;
+        println!("ingested {} into the inbox ({})", plan.id, plan.title);
+        if let Some(url) = plan.review_url {
+            println!("review: {url}");
+        }
+        return Ok(());
+    }
+
+    bail!("nothing to do: pass a plan path, or --list / --accept / --decline / --supersede")
+}
+
+fn run_task(ask: Option<&str>, list: bool) -> Result<()> {
+    let paths = BulkheadPaths::discover()?;
+    let repo = repo::detect(Path::new("."))?;
+
+    if list {
+        for item in backlog::list(&paths, &repo.id)? {
+            println!("{} [{}] {}", item.id, item.state, item.title);
+        }
+        return Ok(());
+    }
+
+    let ask = ask.context("provide an ask, or pass --list")?;
+    let id = backlog::create(&paths, &repo.id, ask)?;
+    println!("queued {id}");
     Ok(())
 }
 

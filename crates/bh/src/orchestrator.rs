@@ -16,6 +16,9 @@ use crate::paths::BulkheadPaths;
 /// The v1 orchestrator contract.
 pub const CONTRACT: &str = include_str!("../../../prompts/orchestrator-contract.md");
 
+/// The plan triage rules.
+pub const TRIAGE_RULES: &str = include_str!("../../../prompts/triage-rules.md");
+
 /// The `bulkhead-orch` extension entry point.
 pub const EXTENSION: &str = include_str!("../../../extensions/bulkhead-orch/src/extension.ts");
 
@@ -39,6 +42,10 @@ pub fn extension_entry(paths: &BulkheadPaths, repo: &RepoId) -> PathBuf {
 /// overwritten; `bh init` and `bh attach` both call this.
 pub fn install(paths: &BulkheadPaths, repo: &RepoId) -> Result<()> {
     write_atomic(&contract_path(paths, repo), CONTRACT)?;
+    write_atomic(
+        &paths.agent_dir(repo).join("prompts/triage-rules.md"),
+        TRIAGE_RULES,
+    )?;
     write_atomic(&extension_entry(paths, repo), EXTENSION)?;
     Ok(())
 }

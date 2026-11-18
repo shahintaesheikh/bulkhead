@@ -34,8 +34,8 @@ pub fn detect(start: &Path) -> Result<DetectedRepo> {
     Ok(DetectedRepo { root, origin, id })
 }
 
-/// Lowercases a name and reduces runs of non-alphanumerics to `-`.
-pub fn slugify(name: &str) -> Option<RepoId> {
+/// Lowercases text and reduces runs of non-alphanumerics to `-`.
+pub fn slug_text(name: &str) -> Option<String> {
     let mut slug = String::new();
     let mut pending_dash = false;
 
@@ -51,11 +51,12 @@ pub fn slugify(name: &str) -> Option<RepoId> {
         }
     }
 
-    if slug.is_empty() {
-        None
-    } else {
-        Some(RepoId::new(slug))
-    }
+    if slug.is_empty() { None } else { Some(slug) }
+}
+
+/// Slugifies a repo directory name into a `RepoId`.
+pub fn slugify(name: &str) -> Option<RepoId> {
+    slug_text(name).map(RepoId::new)
 }
 
 /// Runs git with an argument array (never a shell string) and returns stdout.

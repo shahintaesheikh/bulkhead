@@ -5,11 +5,10 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use bh_core::brief::BriefContext;
-use bh_core::{DeliveryMode, PaneId, RepoId, SessionRef, TabId, Task, TaskId, Timestamp};
+use bh_core::{DeliveryMode, PaneId, RepoId, SessionRef, TabId, Task, TaskId};
 
 use crate::fsx;
 use crate::herdr::Herdr;
@@ -58,7 +57,7 @@ pub fn spawn(
         .join("backlog")
         .join(format!("{task_id}.md"));
     let raw = fs::read_to_string(&backlog).unwrap_or_default();
-    let (title, body) = split_title_body(&raw);
+    let (title, body) = backlog_title_body(&raw);
     if title.is_empty() {
         bail!(
             "backlog item {task_id} has no title (expected a `#` heading in {})",
@@ -100,7 +99,7 @@ pub fn spawn(
     ];
     herdr.start_agent(&pane, task_id.as_str(), PI_KIND, &extra)?;
 
-    let now = now();
+    let now = crate::clock::now();
     let task = Task {
         id: task_id.clone(),
         repo: repo.id.clone(),
@@ -245,6 +244,17 @@ fn render_status(task: &Task, tail: &[String]) -> String {
     output
 }
 
+fn backlog_title_body(raw: &str) -> (String, String) {
+    if let Ok((fields, body)) = bh_core::frontmatter::parse(raw) {
+        if let Some(title) = fields.get("title") {
+            if !title.is_empty() {
+                return (title.clone(), body.trim().to_owned());
+            }
+        }
+    }
+    split_title_body(raw)
+}
+
 fn split_title_body(raw: &str) -> (String, String) {
     let mut title = String::new();
     let mut body = String::new();
@@ -269,14 +279,6 @@ fn delivery_name(mode: DeliveryMode) -> &'static str {
         DeliveryMode::DirectPr => "direct-pr",
         DeliveryMode::Local => "local",
     }
-}
-
-fn now() -> Timestamp {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .unwrap_or(0);
-    Timestamp::from_secs(secs)
 }
 
 const PI_KIND: &str = "pi";

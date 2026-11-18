@@ -65,10 +65,38 @@ function registerBhTools(pi: ExtensionAPI): void {
 
   register(
     "bh_plan",
-    "Add a plan to this repo's inbox.",
-    "Add a plan to this repo with bh_plan.",
-    Type.Object({ path: Type.String({ description: "Path to the plan file" }) }),
-    (params) => ["plan", String(params.path)],
+    "Add a plan to the inbox, or triage one by id.",
+    "Add or triage plans with bh_plan.",
+    Type.Object({
+      path: Type.Optional(Type.String({ description: "Plan file to add" })),
+      accept: Type.Optional(Type.String({ description: "Plan id to accept" })),
+      decline: Type.Optional(Type.String({ description: "Plan id to decline" })),
+      supersede: Type.Optional(Type.String({ description: "Plan id to supersede" })),
+      reason: Type.Optional(Type.String({ description: "Reason for decline or supersede" })),
+    }),
+    (params) => {
+      if (typeof params.path === "string") {
+        return ["plan", params.path];
+      }
+      if (typeof params.accept === "string") {
+        return ["plan", "--accept", params.accept];
+      }
+      if (typeof params.decline === "string") {
+        const args = ["plan", "--decline", params.decline];
+        if (typeof params.reason === "string") {
+          args.push("--reason", params.reason);
+        }
+        return args;
+      }
+      if (typeof params.supersede === "string") {
+        const args = ["plan", "--supersede", params.supersede];
+        if (typeof params.reason === "string") {
+          args.push("--reason", params.reason);
+        }
+        return args;
+      }
+      throw new Error("bh_plan needs a path or an accept/decline/supersede id");
+    },
   );
 
   register(
