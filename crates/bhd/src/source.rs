@@ -31,6 +31,15 @@ pub enum SourceEvent {
     },
     /// The batch interval elapsed.
     Tick,
+    /// herdr reported a pane's agent state changed.
+    HerdrPane {
+        /// The pane's workspace.
+        workspace: bh_core::WorkspaceId,
+        /// The pane.
+        pane: bh_core::PaneId,
+        /// Its new state.
+        state: bh_core::PaneState,
+    },
     /// Stop.
     Shutdown,
 }

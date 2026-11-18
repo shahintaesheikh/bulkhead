@@ -2,6 +2,7 @@
 
 pub mod clock;
 pub mod core;
+pub mod herdr;
 pub mod paths;
 pub mod socket;
 pub mod source;
@@ -29,8 +30,25 @@ pub async fn run(paths: Paths, batch: Duration) -> Result<()> {
         }
     });
 
+    let event_sender = sender.clone();
+    let socket = herdr::default_socket();
+    tokio::spawn(async move { herdr::run_events(socket, event_sender).await });
+
+    let herdr_bin = std::env::var_os("BULKHEAD_HERDR_BIN").map_or_else(
+        || std::path::PathBuf::from("herdr"),
+        std::path::PathBuf::from,
+    );
+    let poll_secs = std::env::var("BULKHEAD_HERDR_POLL_SECS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(10);
+    let poll_sender = sender.clone();
+    tokio::spawn(async move {
+        herdr::run_polling(herdr_bin, Duration::from_secs(poll_secs), poll_sender).await
+    });
+
     let registry = paths::load_registry(&paths)?;
-    let mut core = Core::new(paths.clone(), registry.repos.keys().cloned())?;
+    let mut core = Core::new(paths.clone(), &registry)?;
     let mut ticker = tokio::time::interval(batch);
     let mut shutdown = Box::pin(tokio::signal::ctrl_c());
 

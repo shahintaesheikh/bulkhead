@@ -3,12 +3,30 @@
 use std::fs;
 use std::path::PathBuf;
 
+use std::collections::BTreeMap;
+
 use bh_core::protocol::{Envelope, ProtocolMessage};
-use bh_core::{RepoId, WakeKind};
+use bh_core::{
+    DeliveryMode, PaneId, PaneState, Registry, RegistryEntry, RepoId, WakeKind, WorkspaceId,
+};
 use bhd::core::Core;
 use bhd::paths::Paths;
 use bhd::source::SourceEvent;
 use tokio::sync::mpsc;
+
+fn registry(repo: &RepoId) -> Registry {
+    let mut repos = BTreeMap::new();
+    repos.insert(
+        repo.clone(),
+        RegistryEntry {
+            path: std::path::PathBuf::from("/tmp/does-not-matter"),
+            origin: None,
+            workspace: Some(WorkspaceId::from("w1")),
+            delivery: DeliveryMode::NoMistakes,
+        },
+    );
+    Registry { repos }
+}
 
 fn setup() -> (tempfile::TempDir, Paths, RepoId, PathBuf) {
     let tmp = tempfile::tempdir().unwrap();
@@ -27,7 +45,7 @@ fn setup() -> (tempfile::TempDir, Paths, RepoId, PathBuf) {
 #[tokio::test]
 async fn status_line_becomes_a_durable_delivered_wake() {
     let (_tmp, paths, repo, log) = setup();
-    let mut core = Core::new(paths.clone(), std::iter::once(repo.clone())).unwrap();
+    let mut core = Core::new(paths.clone(), &registry(&repo)).unwrap();
 
     let (client, mut received) = mpsc::unbounded_channel::<Envelope>();
     core.handle(SourceEvent::Connected {
@@ -63,12 +81,15 @@ async fn status_line_becomes_a_durable_delivered_wake() {
     let raw = fs::read_to_string(paths.wakes_file(&repo)).unwrap();
     assert!(raw.contains("\"record\":\"delivered\""), "{raw}");
     assert_eq!(core.pending(&repo), 0);
+
+    let digest = fs::read_to_string(paths.state_dir(&repo).join("digest.md")).unwrap();
+    assert!(digest.contains("blocked: t-1"), "{digest}");
 }
 
 #[tokio::test]
 async fn plan_arrival_wakes_only_once() {
     let (_tmp, paths, repo, _log) = setup();
-    let mut core = Core::new(paths.clone(), std::iter::once(repo.clone())).unwrap();
+    let mut core = Core::new(paths.clone(), &registry(&repo)).unwrap();
     let (client, mut received) = mpsc::unbounded_channel::<Envelope>();
     core.handle(SourceEvent::Connected {
         repo: repo.clone(),
@@ -100,4 +121,31 @@ async fn plan_arrival_wakes_only_once() {
 
     let raw = fs::read_to_string(paths.wakes_file(&repo)).unwrap();
     assert_eq!(raw.matches("\"record\":\"wake\"").count(), 1, "{raw}");
+}
+
+#[tokio::test]
+async fn herdr_pane_state_maps_to_the_repo_without_a_wake() {
+    let (_tmp, paths, repo, _log) = setup();
+    let mut core = Core::new(paths.clone(), &registry(&repo)).unwrap();
+
+    core.handle(SourceEvent::HerdrPane {
+        workspace: WorkspaceId::from("w1"),
+        pane: PaneId::from("w1:p1"),
+        state: PaneState::Blocked,
+    })
+    .unwrap();
+
+    assert_eq!(
+        core.repo_for_workspace(&WorkspaceId::from("w1")),
+        Some(&repo)
+    );
+    assert_eq!(core.pending(&repo), 0);
+
+    // An unknown workspace is ignored.
+    core.handle(SourceEvent::HerdrPane {
+        workspace: WorkspaceId::from("w9"),
+        pane: PaneId::from("w9:p1"),
+        state: PaneState::Done,
+    })
+    .unwrap();
 }

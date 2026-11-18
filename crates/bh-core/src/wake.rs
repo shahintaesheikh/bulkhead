@@ -29,6 +29,23 @@ pub enum WakeKind {
     AwayBrief,
 }
 
+impl WakeKind {
+    /// A stable token for logs, digests and prompts.
+    pub fn as_token(&self) -> &'static str {
+        match self {
+            Self::PlanInbox => "plan-inbox",
+            Self::NeedsDecision => "needs-decision",
+            Self::Blocked => "blocked",
+            Self::PrOpened => "pr-opened",
+            Self::TaskDone => "task-done",
+            Self::TaskStalled => "task-stalled",
+            Self::CrewGone => "crew-gone",
+            Self::OrchestratorRevived => "orchestrator-revived",
+            Self::AwayBrief => "away-brief",
+        }
+    }
+}
+
 /// One actionable event for an orchestrator.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Wake {

@@ -8,7 +8,7 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 10: herdr pane-event subscription in `bhd`, with a polling fallback.
+- Unit 12: stall detection, away policy, return brief, phone push, `bhd` orchestrator revival, and the launchd plist.
 
 ## Completed
 
@@ -22,6 +22,8 @@ Update this file after every meaningful implementation change.
 - Unit 07: `bh::config`; `bh::ghaxi::GhAxi` and `bh::no_mistakes::NoMistakes` adapters; `bh::delivery::land` with approval gate, three modes, `depends_on` stacking and teardown; `bh land`; fakes and tests. `bh_core::Task` gained `base`/`depends_on`. Spec: `specs/07-delivery-land.md`.
 - Unit 08: `bh-core::frontmatter` and `bh-core::plan`; `bh::plan` (ingest/triage across inbox/accepted/declined), `bh::backlog`, `bh::lavish::LavishAxi`; `bh plan` and `bh task`; `prompts/triage-rules.md` installed with the contract; `bh_plan` tool extended to triage. Spec: `specs/08-plan-task-triage.md`.
 - Unit 09: `bhd` lib+bin with `notify` watcher, durable per-repo `wakes.jsonl`, batcher, Unix socket server, synchronous `Core` loop, and the extension wake client (follow-up delivery, dedupe, reconnect). Pane env now carries `BULKHEAD_REPO`/`BULKHEAD_SOCKET`. Spec: `specs/09-bhd-daemon.md`.
+- Unit 10: `bhd::herdr` pane-agent-status subscription over the herdr socket plus a `herdr pane list` polling fallback; `SourceEvent::HerdrPane` and workspace-to-repo mapping in `Core`. Spec: `specs/10-herdr-events.md`.
+- Unit 11: `WakeKind::as_token`; `bhd` rolling `digest.md`; extension turn-end guard that defers wakes received mid-turn and acks at `agent_settled`; replay via reconnect. Spec: `specs/11-turnend-guard-digest.md`.
 
 ## In Progress
 
@@ -29,7 +31,7 @@ Update this file after every meaningful implementation change.
 
 ## Next Up
 
-- Unit 10: herdr pane-event subscription with polling fallback.
+- Unit 12: stall detection, away policy, push, revival, launchd.
 
 ## Open Questions
 
@@ -69,7 +71,9 @@ Update this file after every meaningful implementation change.
 - Plans are triaged with `bh plan --accept/--decline/--supersede`; the inbox watcher is in `bhd` (Unit 09) and the lavish poll loop is deferred to Unit 12.
 - Unit 09 duplicates the `~/.bulkhead` path layout in `bh::paths` and `bhd::paths`. Consider a shared `bh-core` path module once the layout settles.
 - `bhd` re-offers every pending wake on each batch tick until acked. Confirm the 30s cadence is acceptable, or add a per-wake retry backoff in Unit 12.
-- The daemon restarts lose in-memory file offsets and seen-plan ids; on restart the first scan may re-read a status log from zero, producing duplicate wakes for old lines. A persisted per-file offset is a candidate for Unit 11.
+- The daemon restarts lose in-memory file offsets and seen-plan ids; on restart the first scan may re-read a status log from zero, producing duplicate wakes for old lines. A persisted per-file offset is a candidate for Unit 12.
+- Unit 11 acks at `agent_settled`, so a long turn keeps a wake pending and re-offered every batch; the extension dedupes. Confirm that is preferable to acking on delivery.
+- `digest.md` grows without bound; decide when/how the orchestrator compacts it.
 
 ## Architecture Decisions
 
@@ -98,3 +102,5 @@ Update this file after every meaningful implementation change.
 - Unit 07 landed. `bh land` gates on explicit approval (or `yolo`/`local`), merges via gh-axi or no-mistakes, lands `depends_on` first, and tears down. 40 tests pass.
 - Unit 08 landed. Plan intake and triage and backlog creation are wired; HTML plans get a lavish review URL; triage rules ship with the contract. 47 tests pass; tsc clean.
 - Unit 09 landed. `bhd` watches every repo, records durable wakes before delivery, serves the extension socket, and batches about every 30s; the extension delivers wakes as follow-ups, dedupes on id and acks. 52 tests pass; tsc clean.
+- Unit 10 landed. `bhd` subscribes to herdr `pane.agent_status_changed` and falls back to polling `herdr pane list`; core maps workspace ids to repos.
+- Unit 11 landed. Wakes arriving mid-turn are deferred and acked at settle; `digest.md` records every wake. 53 tests pass; tsc clean.

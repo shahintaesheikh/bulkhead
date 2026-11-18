@@ -203,6 +203,8 @@ function startWakeClient(pi: ExtensionAPI): void {
   let socket: Socket | undefined;
   let buffer = "";
   let closed = false;
+  let activeTurn = false;
+  const deferred: Wake[] = [];
 
   const send = (message: Record<string, unknown>): void => {
     if (!socket || socket.destroyed) {
@@ -214,6 +216,26 @@ function startWakeClient(pi: ExtensionAPI): void {
         message,
       }) + "\n",
     );
+  };
+
+  const flushDeferred = (): void => {
+    const wakes = deferred.splice(0, deferred.length);
+    if (wakes.length === 0) {
+      return;
+    }
+    const text = wakes.map((wake) => `- ${wake.summary}`).join("\n");
+    try {
+      pi.sendUserMessage(
+        `bulkhead: ${wakes.length} wake(s) arrived during your turn:\n${text}`,
+        { deliverAs: "followUp" },
+      );
+    } catch {
+      deferred.push(...wakes);
+      return;
+    }
+    for (const wake of wakes) {
+      send({ type: "ack", wake: wake.id });
+    }
   };
 
   const handle = (envelope: Envelope): void => {
@@ -234,6 +256,14 @@ function startWakeClient(pi: ExtensionAPI): void {
     }
 
     delivered.add(wake.id);
+
+    // While a turn is running, hold the wake until it settles so the guard can
+    // deliver it as one follow-up and only then acknowledge it (at-least-once).
+    if (activeTurn) {
+      deferred.push(wake);
+      return;
+    }
+
     try {
       pi.sendUserMessage(wake.summary, { deliverAs: "followUp" });
     } catch {
@@ -278,6 +308,15 @@ function startWakeClient(pi: ExtensionAPI): void {
   };
 
   connectOnce();
+
+  // Turn-end guard: if wakes arrived while a turn ran, deliver them now.
+  pi.on("agent_start", async () => {
+    activeTurn = true;
+  });
+  pi.on("agent_settled", async () => {
+    activeTurn = false;
+    flushDeferred();
+  });
 
   pi.on("session_shutdown", async () => {
     closed = true;

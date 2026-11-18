@@ -7,12 +7,15 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use bh_core::protocol::{Envelope, ProtocolMessage};
 use bh_core::status::StatusLine;
-use bh_core::{Event, PlanId, RepoId, SupervisionState, TaskId, Wake, WakeId};
+use bh_core::{
+    Event, PlanId, Registry, RepoId, SupervisionState, TaskId, Wake, WakeId, WorkspaceId,
+};
 use tokio::sync::mpsc;
 
 use crate::clock;
@@ -29,17 +32,22 @@ pub struct Core {
     offsets: BTreeMap<PathBuf, u64>,
     seen_plans: BTreeSet<(RepoId, String)>,
     away: BTreeMap<RepoId, bool>,
+    workspaces: BTreeMap<WorkspaceId, RepoId>,
 }
 
 impl Core {
     /// Builds a core, rehydrating each repo's wake store.
-    pub fn new(paths: Paths, repos: impl Iterator<Item = RepoId>) -> Result<Self> {
+    pub fn new(paths: Paths, registry: &Registry) -> Result<Self> {
         let mut stores = BTreeMap::new();
+        let mut workspaces = BTreeMap::new();
         let mut max_seq = 0;
-        for repo in repos {
-            let store = WakeStore::load(paths.wakes_file(&repo))?;
+        for (repo, entry) in &registry.repos {
+            if let Some(workspace) = &entry.workspace {
+                workspaces.insert(workspace.clone(), repo.clone());
+            }
+            let store = WakeStore::load(paths.wakes_file(repo))?;
             max_seq = max_seq.max(store.max_seq());
-            stores.insert(repo, store);
+            stores.insert(repo.clone(), store);
         }
         let mut state = SupervisionState::new();
         state.seed_wake_seq(max_seq);
@@ -51,6 +59,7 @@ impl Core {
             offsets: BTreeMap::new(),
             seen_plans: BTreeSet::new(),
             away: BTreeMap::new(),
+            workspaces,
         })
     }
 
@@ -71,6 +80,16 @@ impl Core {
             }
             SourceEvent::Tick => {
                 self.deliver();
+                Ok(())
+            }
+            SourceEvent::HerdrPane {
+                workspace,
+                pane,
+                state,
+            } => {
+                if let Some(repo) = self.workspaces.get(&workspace).cloned() {
+                    self.apply(Event::PaneStateChanged { repo, pane, state })?;
+                }
                 Ok(())
             }
             SourceEvent::Shutdown => Ok(()),
@@ -159,7 +178,32 @@ impl Core {
     }
 
     fn record(&mut self, wake: Wake) -> Result<()> {
-        self.store_mut(&wake.repo)?.append(&wake)
+        self.store_mut(&wake.repo)?.append(&wake)?;
+        self.append_digest(&wake)
+    }
+
+    /// Appends one line to the repo's rolling `digest.md`.
+    fn append_digest(&self, wake: &Wake) -> Result<()> {
+        let path = self.paths.state_dir(&wake.repo).join("digest.md");
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+        }
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .with_context(|| format!("opening {}", path.display()))?;
+        let task = wake.task.as_ref().map_or("-", |task| task.as_str());
+        writeln!(
+            file,
+            "- {} {} {}: {}",
+            wake.created_at,
+            task,
+            wake.kind.as_token(),
+            wake.summary
+        )
+        .with_context(|| format!("writing {}", path.display()))?;
+        Ok(())
     }
 
     fn ack(&mut self, id: &WakeId) -> Result<()> {
@@ -182,6 +226,11 @@ impl Core {
                 let _ = client.send(envelope);
             }
         }
+    }
+
+    /// The repo bound to a herdr workspace, if any.
+    pub fn repo_for_workspace(&self, workspace: &WorkspaceId) -> Option<&RepoId> {
+        self.workspaces.get(workspace)
     }
 
     fn store_mut(&mut self, repo: &RepoId) -> Result<&mut WakeStore> {
