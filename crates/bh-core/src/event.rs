@@ -7,6 +7,7 @@
 use crate::ids::{PaneId, PlanId, RepoId, TaskId, WakeId};
 use crate::pane::PaneState;
 use crate::status::StatusVerb;
+use crate::time::Timestamp;
 
 /// A supervision input.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,6 +18,8 @@ pub enum Event {
         task: TaskId,
         verb: StatusVerb,
         message: String,
+        /// When the line was observed. `bh-core` never reads the clock.
+        at: Timestamp,
     },
     /// herdr reported a pane's agent state changed.
     PaneStateChanged {
@@ -25,7 +28,12 @@ pub enum Event {
         state: PaneState,
     },
     /// A new plan landed in a repo inbox.
-    PlanArrived { repo: RepoId, plan: PlanId },
+    PlanArrived {
+        repo: RepoId,
+        plan: PlanId,
+        /// When the plan was observed.
+        at: Timestamp,
+    },
     /// Away-mode toggled for a repo.
     AwayChanged { repo: RepoId, away: bool },
     /// The extension acknowledged delivery of a wake.

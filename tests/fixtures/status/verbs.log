@@ -1,0 +1,6 @@
+working: drafting the classifier
+needs-decision: should unknown verbs wake the orchestrator?
+blocked: waiting on the treehouse pool
+pr: https://github.com/shahintaesheikh/bulkhead/pull/7
+done: shipped
+deploying: verb from a newer crew build

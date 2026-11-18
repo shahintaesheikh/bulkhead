@@ -46,6 +46,57 @@ impl StatusVerb {
     }
 }
 
+/// A parsed status-log line (`verb: message`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StatusLine {
+    /// The verb that leads the line.
+    pub verb: StatusVerb,
+    /// Everything after the first colon, trimmed.
+    pub message: String,
+}
+
+impl StatusLine {
+    /// Parses one `verb: message` line.
+    ///
+    /// Leading and trailing whitespace is ignored, and the split happens at
+    /// the first colon so the message may itself contain colons. The verb is
+    /// matched case-sensitively against the protocol tokens; anything else
+    /// becomes [`StatusVerb::Unknown`].
+    pub fn parse(line: &str) -> Result<Self, StatusParseError> {
+        let line = line.trim();
+        let (token, message) = line
+            .split_once(':')
+            .ok_or(StatusParseError::MissingSeparator)?;
+        let token = token.trim();
+        if token.is_empty() {
+            return Err(StatusParseError::EmptyVerb);
+        }
+        let verb = match token {
+            "working" => StatusVerb::Working,
+            "needs-decision" => StatusVerb::NeedsDecision,
+            "blocked" => StatusVerb::Blocked,
+            "pr" => StatusVerb::Pr,
+            "done" => StatusVerb::Done,
+            other => StatusVerb::Unknown(other.to_owned()),
+        };
+        Ok(Self {
+            verb,
+            message: message.trim().to_owned(),
+        })
+    }
+}
+
+/// Reasons a status line cannot be parsed.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum StatusParseError {
+    /// The line has no `:` separator.
+    #[error("status line has no `:` separator")]
+    MissingSeparator,
+    /// The line has a separator but no verb before it.
+    #[error("status line has an empty verb")]
+    EmptyVerb,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -67,5 +118,34 @@ mod tests {
     fn only_done_is_terminal() {
         assert!(StatusVerb::Done.is_terminal());
         assert!(!StatusVerb::Blocked.is_terminal());
+    }
+
+    #[test]
+    fn parses_known_and_unknown_verbs() {
+        let line = StatusLine::parse("  needs-decision: pick a format  ").unwrap();
+        assert_eq!(line.verb, StatusVerb::NeedsDecision);
+        assert_eq!(line.message, "pick a format");
+
+        let line = StatusLine::parse("deploying: new verb").unwrap();
+        assert_eq!(line.verb, StatusVerb::Unknown("deploying".to_owned()));
+    }
+
+    #[test]
+    fn keeps_colons_inside_the_message() {
+        let line = StatusLine::parse("blocked: waiting on X: then Y").unwrap();
+        assert_eq!(line.verb, StatusVerb::Blocked);
+        assert_eq!(line.message, "waiting on X: then Y");
+    }
+
+    #[test]
+    fn rejects_separatorless_and_verbless_lines() {
+        assert_eq!(
+            StatusLine::parse("working"),
+            Err(StatusParseError::MissingSeparator)
+        );
+        assert_eq!(
+            StatusLine::parse(": no verb"),
+            Err(StatusParseError::EmptyVerb)
+        );
     }
 }

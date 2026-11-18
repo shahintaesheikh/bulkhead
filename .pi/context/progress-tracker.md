@@ -8,12 +8,13 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 02: status-log parser and `classify(state, event)` in `bh-core`, with fixture tests for every verb.
+- Unit 03: `bh init` (registry, repo home layout, agent-folder builder) and `bh doctor`.
 
 ## Completed
 
 - Design spec: per-repo orchestrator, layout, `bh` command surface, orchestrator contract and dispatch policy, crew lifecycle and status protocol, plan ingress and triage, repo context, away-mode, persistence, Rust implementation plan, build order.
 - Unit 01: Cargo workspace (`bh-core`, `bhd`, `bh`), `rust-toolchain.toml` pinned to 1.99.1, domain types (ids, time, `StatusVerb`, `PaneState`, `Event`, `Wake`/`WakeRecord`/`WakeKind`, `Task`, `Registry`/`RepoConfig`), versioned `bhd` ↔ extension protocol (`Envelope`, `ProtocolError`), serde round-trip tests. Spec: `specs/01-cargo-workspace.md`.
+- Unit 02: `StatusLine`/`StatusLine::parse` with typed errors, `SupervisionState`/`RepoState`/`TaskState`, pure `classify(state, event)` with wake rules, status fixtures, parser and classifier tests. Spec: `specs/02-status-classifier.md`.
 
 ## In Progress
 
@@ -21,7 +22,7 @@ Update this file after every meaningful implementation change.
 
 ## Next Up
 
-- Unit 02: status-log parser and classifier with fixtures.
+- Unit 03: `bh init`, repo home layout, agent-folder builder, `bh doctor`.
 
 ## Open Questions
 
@@ -37,6 +38,7 @@ Update this file after every meaningful implementation change.
 - Confirm the Unit 01 `WakeKind` set (`PlanInbox`, `NeedsDecision`, `Blocked`, `PrOpened`, `TaskDone`, `TaskStalled`, `CrewGone`, `OrchestratorRevived`, `AwayBrief`) as the full list; it was derived from the feature list.
 - Confirm `rebase_after = 1h`; the context names the setting but gives no value.
 - Does bulkhead need an explicit "pane gone" state, or does herdr signal pane closure separately from the five agent states?
+- Should `StatusVerb::Unknown` wake the orchestrator (protocol drift is worth knowing) or stay silent to avoid noise from forward-compatible crew builds?
 
 ## Architecture Decisions
 
@@ -56,3 +58,4 @@ Update this file after every meaningful implementation change.
 - firstmate's `docs/herdr-backend.md` and `bin/fm-brief.sh` are the best references for herdr edge cases and status-protocol wording.
 - Unit 01 landed. The repo was not a git checkout, so no commit was made; the captain owns `git init`. `rust-toolchain.toml` pins 1.99.1, installed on first build. `bh-core` ids use one `string_id!` macro for eight newtypes; flagged for review against the "no macro tricks" standard.
 - Unit 01 review points: `WakeKind` members, `rebase_after` default, and the protocol envelope shape (no `flatten`, so messages nest under `"message"`).
+- Unit 02 landed. `Event::StatusLine` and `Event::PlanArrived` gained an `at: Timestamp` so `classify` can stamp wakes without reading a clock; no other Unit 01 shape changed. Wake ids are deterministic (`w-1`, `w-2`, …) from a counter in `SupervisionState`, seeded by `bhd` from `wakes.jsonl` on restart. Unknown status verbs update state but do not wake; flagged as an open question.
