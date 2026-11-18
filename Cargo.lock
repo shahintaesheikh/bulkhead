@@ -65,6 +65,7 @@ dependencies = [
  "anyhow",
  "bh-core",
  "clap",
+ "serde",
  "serde_json",
  "tempfile",
  "toml",

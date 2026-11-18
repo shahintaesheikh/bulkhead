@@ -8,7 +8,7 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 04: herdr adapter in `bh` (clean-env server start, workspace/tab/pane by id) and `bh` attach that starts the orchestrator in the `orch` tab.
+- Unit 05: `bulkhead-orch` extension skeleton (contract via `--append-system-prompt`, `bh_*` tools shelling out to `bh`) and orchestrator contract v1 in `prompts/`.
 
 ## Completed
 
@@ -16,6 +16,7 @@ Update this file after every meaningful implementation change.
 - Unit 01: Cargo workspace (`bh-core`, `bhd`, `bh`), `rust-toolchain.toml` pinned to 1.99.1, domain types (ids, time, `StatusVerb`, `PaneState`, `Event`, `Wake`/`WakeRecord`/`WakeKind`, `Task`, `Registry`/`RepoConfig`), versioned `bhd` ↔ extension protocol (`Envelope`, `ProtocolError`), serde round-trip tests. Spec: `specs/01-cargo-workspace.md`.
 - Unit 02: `StatusLine`/`StatusLine::parse` with typed errors, `SupervisionState`/`RepoState`/`TaskState`, pure `classify(state, event)` with wake rules, status fixtures, parser and classifier tests. Spec: `specs/02-status-classifier.md`.
 - Unit 03: `bh` lib+bin split; `bh init` (git detection, slug, registry, repo home, generated `config.toml`/`settings.json`/`mcp.json`, global symlinks); `bh doctor` (registry, config, JSON, broken symlinks, stray `AGENTS.md`); temp-home integration tests. `RegistryEntry.workspace` is now `Option`. Spec: `specs/03-init-agent-folder.md`.
+- Unit 04: `bh::herdr::Herdr` CLI adapter (clean-env server start, workspace/tab/pane by id, typed JSON results); `bh::attach::ensure` (server → workspace → `orch` tab → orchestrator, workspace id persisted); `bh attach`/bare `bh`; `tests/fixtures/fake-herdr` scripted fake and integration tests. Spec: `specs/04-herdr-adapter.md`.
 
 ## In Progress
 
@@ -23,7 +24,7 @@ Update this file after every meaningful implementation change.
 
 ## Next Up
 
-- Unit 04: herdr adapter and `bh` attach.
+- Unit 05: `bulkhead-orch` extension skeleton and orchestrator contract v1.
 
 ## Open Questions
 
@@ -44,6 +45,10 @@ Update this file after every meaningful implementation change.
 - Generated per-repo `settings.json` is seeded with the global `defaultProvider`/`defaultModel` because Pi reads the whole global layer from `PI_CODING_AGENT_DIR` and settings is generated, not symlinked. Confirm this inheritance is intended.
 - `bh doctor`'s "stray AGENTS.md" check currently means an `AGENTS.md` in the repo agent folder that is a regular file rather than a symlink. Confirm that matches the intended check.
 - `BULKHEAD_HOME` and `BULKHEAD_AGENT_DIR` are the env overrides used for tests and relocation; decide whether to document them as public.
+- Unit 04 herdr recon: installed `herdr 0.9.5` reports **protocol 22** (context said 16+, satisfied); socket frames are JSON-RPC-like `request`/`success_response`/`error_response`/`subscription_event` per `herdr api schema`. Recorded in `specs/04-herdr-adapter.md`.
+- Unit 04 assumes `herdr --session <s> status server` does not print `status: running` (and exits non-zero) when the server is down; unverified live because stopping the real server is out of bounds. Confirm when a safe session exists.
+- Clean-env server start (`env_clear` + `PATH`/`HOME` + explicit child env) is enforced in code but not asserted by tests; add a live check once a disposable server can be started.
+- `bh attach` starts Pi with `herdr agent start orch --kind pi --pane <id>` and no extra args. Unit 05 must add the contract (`--append-system-prompt`) and extension wiring (`-e`).
 
 ## Architecture Decisions
 
@@ -66,3 +71,4 @@ Update this file after every meaningful implementation change.
 - Unit 02 landed. `Event::StatusLine` and `Event::PlanArrived` gained an `at: Timestamp` so `classify` can stamp wakes without reading a clock; no other Unit 01 shape changed. Wake ids are deterministic (`w-1`, `w-2`, …) from a counter in `SupervisionState`, seeded by `bhd` from `wakes.jsonl` on restart. Unknown status verbs update state but do not wake; flagged as an open question.
 - Unit 03 landed. `bh` is a lib+bin crate so integration tests can drive `init`/`doctor`; `BulkheadPaths` is injected, never discovered in tests. `bh init` links only present global files and generates per-repo `settings.json`/`mcp.json`; `bh doctor` reports errors but does not mutate. A manual CLI run against a temp home passed (`demo-repo` registered, doctor clean).
 - Unit 03 changed the Unit 01 `RegistryEntry.workspace` field to `Option<WorkspaceId>` (init runs before the herdr adapter exists). Flagged for review.
+- Unit 04 landed. All herdr access is by id; the fake herdr is Python and logs exact argument arrays. `bh attach` orchestrates but the interactive `exec` is untested (it replaces the process). 33 tests pass.

@@ -1,0 +1,231 @@
+#!/usr/bin/env python3
+"""Scripted herdr CLI for bulkhead tests.
+
+State lives in the directory named by $FAKE_HERDR_STATE (passed through by the
+adapter's child environment). Every invocation is appended to calls.log so a
+test can assert the exact argument arrays bulkhead sent.
+
+This models only the commands the adapter uses: `status server`, `server`,
+`workspace list|create`, `tab list|create`, `pane list`, `agent start`.
+"""
+
+import json
+import os
+import sys
+
+STATE = None
+
+
+def state_dir():
+    directory = os.environ.get("FAKE_HERDR_STATE")
+    if not directory:
+        sys.stderr.write("fake-herdr: FAKE_HERDR_STATE is not set\n")
+        sys.exit(2)
+    os.makedirs(directory, exist_ok=True)
+    return directory
+
+
+def load(name, default):
+    path = os.path.join(STATE, name)
+    if not os.path.exists(path):
+        return default
+    with open(path) as handle:
+        return json.load(handle)
+
+
+def save(name, value):
+    with open(os.path.join(STATE, name), "w") as handle:
+        json.dump(value, handle)
+
+
+def emit(result):
+    json.dump({"id": "fake", "result": result}, sys.stdout)
+    sys.stdout.write("\n")
+
+
+def parse_opts(args):
+    opts = {}
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--":
+            break
+        if arg in ("--cwd", "--label", "--workspace", "--env", "--pane", "--kind"):
+            index += 1
+            value = args[index]
+            if arg == "--env":
+                opts.setdefault("env", []).append(value)
+            else:
+                opts[arg[2:]] = value
+        index += 1
+    return opts
+
+
+def main(argv):
+    global STATE
+    STATE = state_dir()
+    with open(os.path.join(STATE, "calls.log"), "a") as handle:
+        handle.write(" ".join(argv) + "\n")
+
+    args = list(argv)
+    if args[:1] == ["--session"]:
+        args = args[2:]
+    command = args.pop(0) if args else ""
+
+    if command == "status":
+        target = args[0] if args else "server"
+        if target == "server":
+            if os.path.exists(os.path.join(STATE, "server")):
+                sys.stdout.write("status: running\nversion: 0.9.5\n")
+                return 0
+            sys.stdout.write("status: not running\n")
+            return 1
+        sys.stdout.write("status: running\n")
+        return 0
+
+    if command == "server":
+        with open(os.path.join(STATE, "server"), "w") as handle:
+            handle.write(os.environ.get("PI_CODING_AGENT_DIR", "<unset>"))
+        emit({"type": "server.started"})
+        return 0
+
+    if command == "workspace":
+        sub = args.pop(0) if args else ""
+        if sub == "list":
+            emit({"type": "workspace.list", "workspaces": load("workspaces.json", [])})
+            return 0
+        if sub == "create":
+            opts = parse_opts(args)
+            workspaces = load("workspaces.json", [])
+            number = len(workspaces) + 1
+            workspace_id = "w%d" % number
+            tab_id = "%s:t1" % workspace_id
+            pane_id = "%s:p1" % workspace_id
+            workspace = {
+                "workspace_id": workspace_id,
+                "label": opts.get("label", ""),
+                "active_tab_id": tab_id,
+                "number": number,
+                "focused": False,
+                "pane_count": 1,
+                "tab_count": 1,
+                "agent_status": "idle",
+            }
+            tab = {
+                "tab_id": tab_id,
+                "workspace_id": workspace_id,
+                "label": "1",
+                "number": 1,
+                "focused": False,
+                "pane_count": 1,
+                "agent_status": "idle",
+            }
+            pane = {
+                "pane_id": pane_id,
+                "terminal_id": "term_%s" % pane_id,
+                "workspace_id": workspace_id,
+                "tab_id": tab_id,
+                "focused": False,
+                "revision": 1,
+                "cwd": opts.get("cwd"),
+                "agent": None,
+                "agent_status": "idle",
+            }
+            workspaces.append(workspace)
+            save("workspaces.json", workspaces)
+            tabs = load("tabs.json", [])
+            tabs.append(tab)
+            save("tabs.json", tabs)
+            panes = load("panes.json", [])
+            panes.append(pane)
+            save("panes.json", panes)
+            emit({
+                "type": "workspace.create",
+                "workspace": workspace,
+                "tab": tab,
+                "root_pane": pane,
+            })
+            return 0
+
+    if command == "tab":
+        sub = args.pop(0) if args else ""
+        if sub == "list":
+            opts = parse_opts(args)
+            workspace = opts.get("workspace")
+            tabs = [
+                tab
+                for tab in load("tabs.json", [])
+                if workspace is None or tab["workspace_id"] == workspace
+            ]
+            emit({"type": "tab.list", "tabs": tabs})
+            return 0
+        if sub == "create":
+            opts = parse_opts(args)
+            workspace = opts.get("workspace")
+            tabs = load("tabs.json", [])
+            number = len([t for t in tabs if t["workspace_id"] == workspace]) + 1
+            tab_id = "%s:t%d" % (workspace, number)
+            pane_id = "%s:p%d" % (workspace, number)
+            tab = {
+                "tab_id": tab_id,
+                "workspace_id": workspace,
+                "label": opts.get("label", ""),
+                "number": number,
+                "focused": False,
+                "pane_count": 1,
+                "agent_status": "idle",
+            }
+            pane = {
+                "pane_id": pane_id,
+                "terminal_id": "term_%s" % pane_id,
+                "workspace_id": workspace,
+                "tab_id": tab_id,
+                "focused": False,
+                "revision": 1,
+                "cwd": opts.get("cwd"),
+                "agent": None,
+                "agent_status": "idle",
+            }
+            tabs.append(tab)
+            save("tabs.json", tabs)
+            panes = load("panes.json", [])
+            panes.append(pane)
+            save("panes.json", panes)
+            emit({"type": "tab.create", "tab": tab, "root_pane": pane})
+            return 0
+
+    if command == "pane":
+        sub = args.pop(0) if args else ""
+        if sub == "list":
+            opts = parse_opts(args)
+            workspace = opts.get("workspace")
+            panes = [
+                pane
+                for pane in load("panes.json", [])
+                if workspace is None or pane["workspace_id"] == workspace
+            ]
+            emit({"type": "pane.list", "panes": panes})
+            return 0
+
+    if command == "agent":
+        sub = args.pop(0) if args else ""
+        if sub == "start":
+            name = args.pop(0)
+            opts = parse_opts(args)
+            pane_id = opts.get("pane")
+            panes = load("panes.json", [])
+            for pane in panes:
+                if pane["pane_id"] == pane_id:
+                    pane["agent"] = "pi"
+                    pane["agent_status"] = "working"
+                    pane["name"] = name
+            save("panes.json", panes)
+            emit({"type": "agent.start", "pane_id": pane_id, "name": name})
+            return 0
+
+    sys.stderr.write("fake-herdr: unhandled command: %s %s\n" % (command, args))
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
