@@ -43,6 +43,8 @@ pub fn build(paths: &BulkheadPaths, repo: &RepoId) -> Result<Vec<(&'static str, 
         outcomes.push((*name, link_global(&paths.global_agent, &agent, name)?));
     }
 
+    link_shared_assets(paths, repo, &agent)?;
+
     write_if_missing(
         &agent.join("settings.json"),
         &render_settings(&paths.global_agent)?,
@@ -52,21 +54,51 @@ pub fn build(paths: &BulkheadPaths, repo: &RepoId) -> Result<Vec<(&'static str, 
     Ok(outcomes)
 }
 
+/// Links opted-in shared skills and every shared prompt template.
+///
+/// A skill is opt-in through the repo's `skills` list; a prompt template is
+/// linked whenever it is present in `shared/prompts/`, since an unused slash
+/// command costs no context.
+fn link_shared_assets(paths: &BulkheadPaths, repo: &RepoId, agent: &Path) -> Result<()> {
+    let config = crate::config::load(paths, repo)?;
+    for name in &config.skills {
+        link_path(
+            &paths.shared_dir().join("skills").join(name),
+            &agent.join("skills").join(name),
+        )?;
+    }
+
+    let prompts = paths.shared_dir().join("prompts");
+    if prompts.is_dir() {
+        for entry in
+            fs::read_dir(&prompts).with_context(|| format!("reading {}", prompts.display()))?
+        {
+            let source = entry?.path();
+            if let Some(name) = source.file_name() {
+                link_path(&source, &agent.join("prompts").join(name))?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Symlinks `global_agent/<name>` into `agent/<name>`.
 fn link_global(global_agent: &Path, agent: &Path, name: &str) -> Result<LinkOutcome> {
-    let source = global_agent.join(name);
-    let dest = agent.join(name);
+    link_path(&global_agent.join(name), &agent.join(name))
+}
 
+fn link_path(source: &Path, dest: &Path) -> Result<LinkOutcome> {
     if !source.exists() {
         return Ok(LinkOutcome::SourceMissing);
     }
 
-    match fs::symlink_metadata(&dest) {
+    match fs::symlink_metadata(dest) {
         Ok(meta) if meta.file_type().is_symlink() => {
-            if matches!(fs::read_link(&dest), Ok(current) if current == source) {
+            if matches!(fs::read_link(dest), Ok(current) if current.as_path() == source) {
                 return Ok(LinkOutcome::AlreadyLinked);
             }
-            fs::remove_file(&dest)
+            fs::remove_file(dest)
                 .with_context(|| format!("replacing stale link {}", dest.display()))?;
         }
         Ok(_) => bail!(
@@ -79,7 +111,7 @@ fn link_global(global_agent: &Path, agent: &Path, name: &str) -> Result<LinkOutc
         }
     }
 
-    symlink(&source, &dest)
+    symlink(source, dest)
         .with_context(|| format!("linking {} -> {}", dest.display(), source.display()))?;
     Ok(LinkOutcome::Linked)
 }

@@ -4,11 +4,11 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-- M0 (Skeleton) in progress. Units 01–05 build the workspace, core logic, `bh init`, the herdr adapter and the extension skeleton.
+- Build complete. Units 01–14 are landed; the build plan's milestones M0–M6 are done.
 
 ## Current Goal
 
-- Unit 14: `shared/prompts/bootstrap-context.md` and `shared/skills/spec-units/`, linked into repos that opt in.
+- None. The next work is the captain's review, tuning from real use, and the open questions below.
 
 ## Completed
 
@@ -26,14 +26,15 @@ Update this file after every meaningful implementation change.
 - Unit 11: `WakeKind::as_token`; `bhd` rolling `digest.md`; extension turn-end guard that defers wakes received mid-turn and acks at `agent_settled`; replay via reconnect. Spec: `specs/11-turnend-guard-digest.md`.
 - Unit 12: pure `check_stalls` and `TaskState.stalled`; bhd config loading and tick stalls; `Push` behind `BULKHEAD_PUSH_BIN`; `bh away on|off` with return brief; orchestrator revival via `bh ensure` with a 60s cooldown; `Event::OrchestratorGone`; launchd plist. Spec: `specs/12-stalls-away-revival.md`.
 - Unit 13: `bh::backpass::Backpass` and `bh backpass`; `bh::ls::summarize` and `bh ls` over the registry and herdr workspace list. Spec: `specs/13-backpass-ls.md`.
+- Unit 14: `shared/prompts/bootstrap-context.md` and `shared/skills/spec-units/SKILL.md`; `agent_folder` links opted-in skills and all shared prompts. Spec: `specs/14-shared-assets.md`.
 
 ## In Progress
 
-- None yet.
+- None.
 
 ## Next Up
 
-- Unit 14: shared bootstrap prompt and spec-units skill.
+- None. Build complete.
 
 ## Open Questions
 
@@ -81,6 +82,8 @@ Update this file after every meaningful implementation change.
 - The launchd plist has placeholder paths; fill them when the install location is decided.
 - Unit 13 assumed the backpass CLI: `backpass train <repo-root>`. Confirm against the real tool.
 - Unit 13 does not schedule backpass; it is a captain command. Decide whether a per-repo cadence belongs in `bhd` or launchd.
+- Unit 14 links every shared prompt into every repo, but shared skills only when listed. Confirm that prompt-as-default is acceptable, or add an explicit `prompts` list to `config.toml`.
+- No end-to-end test drives a real Pi orchestrator/crew, herdr, treehouse, no-mistakes, lavish or backpass; all are behind adapters and scripted fakes. The success criteria in `project-overview.md` are the acceptance test once the tools are installed.
 
 ## Architecture Decisions
 
@@ -113,3 +116,4 @@ Update this file after every meaningful implementation change.
 - Unit 11 landed. Wakes arriving mid-turn are deferred and acked at settle; `digest.md` records every wake. 53 tests pass; tsc clean.
 - Unit 12 landed. Stalls, away-mode with a return brief, a `BULKHEAD_PUSH_BIN` push channel, orchestrator revival and a launchd plist. 56 tests pass; tsc clean.
 - Unit 13 landed. `bh ls` and `bh backpass`; the shared-asset linking lands in Unit 14. 57 tests pass.
+- Unit 14 landed. Shared bootstrap prompt and spec-units skill ship, with opt-in skill linking and shared-prompt linking. Build complete: 58 tests pass; fmt, clippy and tsc clean.
