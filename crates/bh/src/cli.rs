@@ -9,15 +9,18 @@ use clap::{Parser, Subcommand};
 use crate::attach;
 use crate::away;
 use crate::backlog;
+use crate::backpass::Backpass;
 use crate::delivery::{self, Landers};
 use crate::doctor::{self, Level};
 use crate::ghaxi::GhAxi;
 use crate::herdr::Herdr;
 use crate::init;
 use crate::lavish::LavishAxi;
+use crate::ls;
 use crate::no_mistakes::NoMistakes;
 use crate::paths::BulkheadPaths;
 use crate::plan;
+use crate::registry;
 use crate::repo;
 use crate::task;
 use crate::treehouse::Treehouse;
@@ -117,6 +120,14 @@ pub enum Command {
         #[arg(default_value = ".")]
         path: PathBuf,
     },
+    /// List registered repos and their state.
+    Ls,
+    /// Train a repo's committed context with backpass.
+    Backpass {
+        /// A path inside the repo (default: the current directory).
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
 }
 
 /// Parses arguments and runs the selected command.
@@ -142,6 +153,8 @@ pub fn run() -> Result<()> {
         Some(Command::Task { ask, list }) => run_task(ask.as_deref(), list),
         Some(Command::Away { mode }) => run_away(&mode),
         Some(Command::Ensure { path }) => run_ensure(&path),
+        Some(Command::Ls) => run_ls(),
+        Some(Command::Backpass { path }) => run_backpass(&path),
         None => run_attach(Path::new(".")),
     }
 }
@@ -378,6 +391,42 @@ fn run_ensure(path: &Path) -> Result<()> {
         "ensured {} (workspace {}, tab {}, pane {})",
         repo.id, plan.workspace, plan.tab, plan.pane
     );
+    Ok(())
+}
+
+fn run_ls() -> Result<()> {
+    let paths = BulkheadPaths::discover()?;
+    let registry = registry::load(&paths)?;
+    let herdr = Herdr::from_env();
+    let workspaces = herdr.list_workspaces().unwrap_or_default();
+    let rows = ls::summarize(&paths, &registry, &workspaces)?;
+
+    if rows.is_empty() {
+        println!("(no repos registered)");
+        return Ok(());
+    }
+    for row in rows {
+        let workspace = match (&row.workspace, &row.workspace_label) {
+            (Some(id), Some(label)) => format!("{id} ({label})"),
+            (Some(id), None) => id.to_string(),
+            (None, _) => "-".to_owned(),
+        };
+        println!(
+            "{}\t{}\t{} tasks\tworkspace {}",
+            row.id,
+            row.path.display(),
+            row.tasks,
+            workspace
+        );
+    }
+    Ok(())
+}
+
+fn run_backpass(path: &Path) -> Result<()> {
+    let repo = repo::detect(path)?;
+    let backpass = Backpass::from_env();
+    backpass.run(&repo.root)?;
+    println!("trained {}", repo.id);
     Ok(())
 }
 

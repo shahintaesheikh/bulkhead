@@ -8,7 +8,7 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 13: backpass per-repo cadence and `bh ls` over herdr state.
+- Unit 14: `shared/prompts/bootstrap-context.md` and `shared/skills/spec-units/`, linked into repos that opt in.
 
 ## Completed
 
@@ -25,6 +25,7 @@ Update this file after every meaningful implementation change.
 - Unit 10: `bhd::herdr` pane-agent-status subscription over the herdr socket plus a `herdr pane list` polling fallback; `SourceEvent::HerdrPane` and workspace-to-repo mapping in `Core`. Spec: `specs/10-herdr-events.md`.
 - Unit 11: `WakeKind::as_token`; `bhd` rolling `digest.md`; extension turn-end guard that defers wakes received mid-turn and acks at `agent_settled`; replay via reconnect. Spec: `specs/11-turnend-guard-digest.md`.
 - Unit 12: pure `check_stalls` and `TaskState.stalled`; bhd config loading and tick stalls; `Push` behind `BULKHEAD_PUSH_BIN`; `bh away on|off` with return brief; orchestrator revival via `bh ensure` with a 60s cooldown; `Event::OrchestratorGone`; launchd plist. Spec: `specs/12-stalls-away-revival.md`.
+- Unit 13: `bh::backpass::Backpass` and `bh backpass`; `bh::ls::summarize` and `bh ls` over the registry and herdr workspace list. Spec: `specs/13-backpass-ls.md`.
 
 ## In Progress
 
@@ -32,7 +33,7 @@ Update this file after every meaningful implementation change.
 
 ## Next Up
 
-- Unit 13: backpass cadence and `bh ls`.
+- Unit 14: shared bootstrap prompt and spec-units skill.
 
 ## Open Questions
 
@@ -78,6 +79,8 @@ Update this file after every meaningful implementation change.
 - Unit 12 push is a single command behind `BULKHEAD_PUSH_BIN`. Confirm the vendor and message shape.
 - Revival shells `bh ensure` from `bhd`; confirm `bh` is on the daemon's `PATH` (the launchd plist sets one) or pin it with `BULKHEAD_BH_BIN`.
 - The launchd plist has placeholder paths; fill them when the install location is decided.
+- Unit 13 assumed the backpass CLI: `backpass train <repo-root>`. Confirm against the real tool.
+- Unit 13 does not schedule backpass; it is a captain command. Decide whether a per-repo cadence belongs in `bhd` or launchd.
 
 ## Architecture Decisions
 
@@ -109,3 +112,4 @@ Update this file after every meaningful implementation change.
 - Unit 10 landed. `bhd` subscribes to herdr `pane.agent_status_changed` and falls back to polling `herdr pane list`; core maps workspace ids to repos.
 - Unit 11 landed. Wakes arriving mid-turn are deferred and acked at settle; `digest.md` records every wake. 53 tests pass; tsc clean.
 - Unit 12 landed. Stalls, away-mode with a return brief, a `BULKHEAD_PUSH_BIN` push channel, orchestrator revival and a launchd plist. 56 tests pass; tsc clean.
+- Unit 13 landed. `bh ls` and `bh backpass`; the shared-asset linking lands in Unit 14. 57 tests pass.
