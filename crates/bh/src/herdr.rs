@@ -189,6 +189,16 @@ impl Herdr {
         self.run_ok(&args)
     }
 
+    /// Sends a message to the agent occupying a pane.
+    pub fn prompt_agent(&self, pane: &PaneId, text: &str) -> Result<()> {
+        self.run_ok(&owned(&["agent", "prompt", pane.as_str(), text]))
+    }
+
+    /// Closes a tab and every pane in it.
+    pub fn close_tab(&self, tab: &TabId) -> Result<()> {
+        self.run_ok(&owned(&["tab", "close", tab.as_str()]))
+    }
+
     /// Replaces this process with the herdr TUI attached to the session.
     ///
     /// Only returns on failure; on success the process image is replaced.

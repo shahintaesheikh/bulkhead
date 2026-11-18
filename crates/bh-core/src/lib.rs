@@ -6,6 +6,7 @@
 //!
 //! Binaries wire I/O to these types; they do not reimplement them.
 
+pub mod brief;
 pub mod classify;
 pub mod config;
 pub mod event;
@@ -17,6 +18,7 @@ pub mod task;
 pub mod time;
 pub mod wake;
 
+pub use brief::{BriefContext, render as render_brief};
 pub use classify::{RepoState, SupervisionState, TaskState, classify};
 pub use config::{AwayPolicy, DeliveryMode, Registry, RegistryEntry, RepoConfig};
 pub use event::Event;

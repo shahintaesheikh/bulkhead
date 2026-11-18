@@ -16,3 +16,5 @@ pub mod orchestrator;
 pub mod paths;
 pub mod registry;
 pub mod repo;
+pub mod task;
+pub mod treehouse;

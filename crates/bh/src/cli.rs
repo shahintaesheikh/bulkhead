@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use bh_core::TaskId;
 use clap::{Parser, Subcommand};
 
 use crate::attach;
@@ -11,6 +12,8 @@ use crate::herdr::Herdr;
 use crate::init;
 use crate::paths::BulkheadPaths;
 use crate::repo;
+use crate::task;
+use crate::treehouse::Treehouse;
 
 /// `bh`: the bulkhead command-line interface.
 #[derive(Debug, Parser)]
@@ -38,6 +41,28 @@ pub enum Command {
         #[arg(default_value = ".")]
         path: PathBuf,
     },
+    /// Spawn a crewmate for a backlog task.
+    Spawn {
+        /// Task id, matching a backlog item.
+        task_id: String,
+    },
+    /// Send a message to a crewmate.
+    Send {
+        /// Task id.
+        task_id: String,
+        /// Message to deliver.
+        message: String,
+    },
+    /// Show task status.
+    Status {
+        /// Task id; omit to list every task.
+        task_id: Option<String>,
+    },
+    /// Tear a task down and return its worktree.
+    Teardown {
+        /// Task id.
+        task_id: String,
+    },
 }
 
 /// Parses arguments and runs the selected command.
@@ -47,6 +72,10 @@ pub fn run() -> Result<()> {
         Some(Command::Init { path }) => run_init(&path),
         Some(Command::Doctor) => run_doctor(),
         Some(Command::Attach { path }) => run_attach(&path),
+        Some(Command::Spawn { task_id }) => run_spawn(&task_id),
+        Some(Command::Send { task_id, message }) => run_send(&task_id, &message),
+        Some(Command::Status { task_id }) => run_status(task_id.as_deref()),
+        Some(Command::Teardown { task_id }) => run_teardown(&task_id),
         None => run_attach(Path::new(".")),
     }
 }
@@ -109,6 +138,49 @@ fn run_attach(path: &Path) -> Result<()> {
     }
 
     herdr.attach()
+}
+
+fn run_spawn(task_id: &str) -> Result<()> {
+    let paths = BulkheadPaths::discover()?;
+    let repo = repo::detect(Path::new("."))?;
+    let herdr = Herdr::from_env();
+    let treehouse = Treehouse::from_env();
+    let report = task::spawn(&paths, &herdr, &treehouse, &repo, &TaskId::from(task_id))?;
+    println!(
+        "spawned {} in {} (tab {}, pane {})",
+        report.task_id,
+        report.worktree.display(),
+        report.tab,
+        report.pane
+    );
+    Ok(())
+}
+
+fn run_send(task_id: &str, message: &str) -> Result<()> {
+    let paths = BulkheadPaths::discover()?;
+    let repo = repo::detect(Path::new("."))?;
+    let herdr = Herdr::from_env();
+    task::send(&herdr, &paths, &repo.id, &TaskId::from(task_id), message)?;
+    println!("sent to {task_id}");
+    Ok(())
+}
+
+fn run_status(task_id: Option<&str>) -> Result<()> {
+    let paths = BulkheadPaths::discover()?;
+    let repo = repo::detect(Path::new("."))?;
+    let task_id = task_id.map(TaskId::from);
+    print!("{}", task::status(&paths, &repo.id, task_id.as_ref())?);
+    Ok(())
+}
+
+fn run_teardown(task_id: &str) -> Result<()> {
+    let paths = BulkheadPaths::discover()?;
+    let repo = repo::detect(Path::new("."))?;
+    let herdr = Herdr::from_env();
+    let treehouse = Treehouse::from_env();
+    task::teardown(&herdr, &treehouse, &paths, &repo.id, &TaskId::from(task_id))?;
+    println!("tore down {task_id}");
+    Ok(())
 }
 
 fn label(level: Level) -> &'static str {

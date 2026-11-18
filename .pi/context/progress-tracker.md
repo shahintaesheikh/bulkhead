@@ -8,7 +8,7 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 06: `bh spawn`, `send`, `status`, `teardown`: treehouse claim, brief rendering, fresh pane launch with the repo's agent folder.
+- Unit 07: delivery modes, `bh land` behind approval via gh-axi, stacked PRs for dependent tasks.
 
 ## Completed
 
@@ -18,6 +18,7 @@ Update this file after every meaningful implementation change.
 - Unit 03: `bh` lib+bin split; `bh init` (git detection, slug, registry, repo home, generated `config.toml`/`settings.json`/`mcp.json`, global symlinks); `bh doctor` (registry, config, JSON, broken symlinks, stray `AGENTS.md`); temp-home integration tests. `RegistryEntry.workspace` is now `Option`. Spec: `specs/03-init-agent-folder.md`.
 - Unit 04: `bh::herdr::Herdr` CLI adapter (clean-env server start, workspace/tab/pane by id, typed JSON results); `bh::attach::ensure` (server → workspace → `orch` tab → orchestrator, workspace id persisted); `bh attach`/bare `bh`; `tests/fixtures/fake-herdr` scripted fake and integration tests. Spec: `specs/04-herdr-adapter.md`.
 - Unit 05: orchestrator contract v1 (`prompts/orchestrator-contract.md`); `bulkhead-orch` Pi extension registering nine `bh_*` tools via `pi.exec`; `bh::orchestrator` embeds contract + extension with `include_str!`, installs them on init/attach, and renders `--append-system-prompt`. Spec: `specs/05-orchestrator-extension.md`.
+- Unit 06: `prompts/crew-brief.md` and pure `bh-core::brief`; `bh::treehouse` (claim/release) and `tests/fixtures/fake-treehouse`; `bh::task` spawn/send/status/teardown; `Herdr::prompt_agent`/`close_tab`; `bh spawn|send|status|teardown`; round-trip integration test. Spec: `specs/06-crew-lifecycle.md`.
 
 ## In Progress
 
@@ -25,7 +26,7 @@ Update this file after every meaningful implementation change.
 
 ## Next Up
 
-- Unit 06: `bh spawn`/`send`/`status`/`teardown`.
+- Unit 07: delivery and `bh land`.
 
 ## Open Questions
 
@@ -53,6 +54,10 @@ Update this file after every meaningful implementation change.
 - Confirm contract v1 wording, especially the authority table and dispatch policy; it is the prompt surface every later wake feeds into.
 - The nine `bh_*` tools exist before their subcommands (Units 06, 08). Confirm that is preferable to registering them only as their subcommands land.
 - Extension assets are embedded in the binary with `include_str!` and written into the repo agent folder rather than installed from a dist tree. Revisit when bulkhead ships prebuilt.
+- Unit 06 assumed the treehouse CLI: `claim <repo-root> <task-id>` prints a worktree path and `release <worktree>`. Confirm against the real tool.
+- Crew branch naming is assumed to be `bh/<task-id>` and the brief says so; confirm treehouse/crew actually use it.
+- Crew Pi is started with `--session-id <task-id>` so `meta.toml` can record a stable session ref; confirm that is the intended resume handle.
+- `teardown` leaves a marker file and keeps `brief.md`/`status.log`/`meta.toml` for history rather than deleting the task folder. Confirm that matches the intended lifecycle.
 
 ## Architecture Decisions
 
@@ -77,3 +82,4 @@ Update this file after every meaningful implementation change.
 - Unit 03 changed the Unit 01 `RegistryEntry.workspace` field to `Option<WorkspaceId>` (init runs before the herdr adapter exists). Flagged for review.
 - Unit 04 landed. All herdr access is by id; the fake herdr is Python and logs exact argument arrays. `bh attach` orchestrates but the interactive `exec` is untested (it replaces the process). 33 tests pass.
 - Unit 05 landed. `extensions/bulkhead-orch` typechecks with `tsc --noEmit` and loads under `pi -e ... --help`. Contract v1 and the extension are embedded in `bh` and written on init/attach so the installed copies match the binary. No socket or wake work yet.
+- Unit 06 landed. Crew lifecycle is wired end to end against fakes: spawn claims a worktree, renders the brief, starts Pi in a tab with the repo agent folder, and records meta.toml; send/status/teardown round-trip. 36 tests pass.

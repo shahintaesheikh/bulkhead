@@ -159,6 +159,18 @@ def main(argv):
             ]
             emit({"type": "tab.list", "tabs": tabs})
             return 0
+        if sub == "close":
+            tab_id = args[0] if args else None
+            save(
+                "tabs.json",
+                [t for t in load("tabs.json", []) if t["tab_id"] != tab_id],
+            )
+            save(
+                "panes.json",
+                [p for p in load("panes.json", []) if p["tab_id"] != tab_id],
+            )
+            emit({"type": "tab.close", "tab_id": tab_id})
+            return 0
         if sub == "create":
             opts = parse_opts(args)
             workspace = opts.get("workspace")
@@ -209,6 +221,13 @@ def main(argv):
 
     if command == "agent":
         sub = args.pop(0) if args else ""
+        if sub == "prompt":
+            target = args.pop(0)
+            text = args.pop(0)
+            with open(os.path.join(STATE, "prompts.log"), "a") as handle:
+                handle.write("%s\t%s\n" % (target, text))
+            emit({"type": "agent.prompt", "target": target})
+            return 0
         if sub == "start":
             name = args.pop(0)
             opts = parse_opts(args)
