@@ -8,7 +8,7 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 07: delivery modes, `bh land` behind approval via gh-axi, stacked PRs for dependent tasks.
+- Unit 08: `bh plan`, `bh task`, inbox triage states, lavish-axi review loop, triage rules in `prompts/`.
 
 ## Completed
 
@@ -19,6 +19,7 @@ Update this file after every meaningful implementation change.
 - Unit 04: `bh::herdr::Herdr` CLI adapter (clean-env server start, workspace/tab/pane by id, typed JSON results); `bh::attach::ensure` (server → workspace → `orch` tab → orchestrator, workspace id persisted); `bh attach`/bare `bh`; `tests/fixtures/fake-herdr` scripted fake and integration tests. Spec: `specs/04-herdr-adapter.md`.
 - Unit 05: orchestrator contract v1 (`prompts/orchestrator-contract.md`); `bulkhead-orch` Pi extension registering nine `bh_*` tools via `pi.exec`; `bh::orchestrator` embeds contract + extension with `include_str!`, installs them on init/attach, and renders `--append-system-prompt`. Spec: `specs/05-orchestrator-extension.md`.
 - Unit 06: `prompts/crew-brief.md` and pure `bh-core::brief`; `bh::treehouse` (claim/release) and `tests/fixtures/fake-treehouse`; `bh::task` spawn/send/status/teardown; `Herdr::prompt_agent`/`close_tab`; `bh spawn|send|status|teardown`; round-trip integration test. Spec: `specs/06-crew-lifecycle.md`.
+- Unit 07: `bh::config`; `bh::ghaxi::GhAxi` and `bh::no_mistakes::NoMistakes` adapters; `bh::delivery::land` with approval gate, three modes, `depends_on` stacking and teardown; `bh land`; fakes and tests. `bh_core::Task` gained `base`/`depends_on`. Spec: `specs/07-delivery-land.md`.
 
 ## In Progress
 
@@ -26,7 +27,7 @@ Update this file after every meaningful implementation change.
 
 ## Next Up
 
-- Unit 07: delivery and `bh land`.
+- Unit 08: plan/task intake and triage.
 
 ## Open Questions
 
@@ -58,6 +59,9 @@ Update this file after every meaningful implementation change.
 - Crew branch naming is assumed to be `bh/<task-id>` and the brief says so; confirm treehouse/crew actually use it.
 - Crew Pi is started with `--session-id <task-id>` so `meta.toml` can record a stable session ref; confirm that is the intended resume handle.
 - `teardown` leaves a marker file and keeps `brief.md`/`status.log`/`meta.toml` for history rather than deleting the task folder. Confirm that matches the intended lifecycle.
+- Unit 07 assumed the no-mistakes CLI: `no-mistakes land <pr-url>`. Confirm against the real tool.
+- `delivery` and `yolo` are read from `<repo>/config.toml`; the registry's `delivery` is treated as a registration default. Decide whether the registry field should be dropped to avoid two sources of truth.
+- Stacked delivery lands dependencies recursively and then tears each down. Confirm the captain approves a whole stack with one `--approve`, and that `base` should be set at spawn (currently it is only recorded).
 
 ## Architecture Decisions
 
@@ -83,3 +87,4 @@ Update this file after every meaningful implementation change.
 - Unit 04 landed. All herdr access is by id; the fake herdr is Python and logs exact argument arrays. `bh attach` orchestrates but the interactive `exec` is untested (it replaces the process). 33 tests pass.
 - Unit 05 landed. `extensions/bulkhead-orch` typechecks with `tsc --noEmit` and loads under `pi -e ... --help`. Contract v1 and the extension are embedded in `bh` and written on init/attach so the installed copies match the binary. No socket or wake work yet.
 - Unit 06 landed. Crew lifecycle is wired end to end against fakes: spawn claims a worktree, renders the brief, starts Pi in a tab with the repo agent folder, and records meta.toml; send/status/teardown round-trip. 36 tests pass.
+- Unit 07 landed. `bh land` gates on explicit approval (or `yolo`/`local`), merges via gh-axi or no-mistakes, lands `depends_on` first, and tears down. 40 tests pass.

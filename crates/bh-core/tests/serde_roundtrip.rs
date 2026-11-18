@@ -140,6 +140,8 @@ fn task_round_trips_through_toml() {
         pane: PaneId::from("w1:p3"),
         session: SessionRef::from("/Users/captain/.pi/sessions/t-1.jsonl"),
         pr_url: Some("https://github.com/captain/bulkhead/pull/1".to_owned()),
+        base: Some("main".to_owned()),
+        depends_on: None,
         created_at: Timestamp::from_secs(1_700_000_000),
         updated_at: Timestamp::from_secs(1_700_000_001),
     };

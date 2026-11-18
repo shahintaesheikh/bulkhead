@@ -30,6 +30,12 @@ pub struct Task {
     pub session: SessionRef,
     /// PR URL once delivery opens one.
     pub pr_url: Option<String>,
+    /// Base branch for the PR, when this task is stacked.
+    #[serde(default)]
+    pub base: Option<String>,
+    /// Task this one depends on; it is landed first.
+    #[serde(default)]
+    pub depends_on: Option<TaskId>,
     /// When the task was spawned.
     pub created_at: Timestamp,
     /// When the metadata last changed.

@@ -7,9 +7,12 @@ use bh_core::TaskId;
 use clap::{Parser, Subcommand};
 
 use crate::attach;
+use crate::delivery::{self, Landers};
 use crate::doctor::{self, Level};
+use crate::ghaxi::GhAxi;
 use crate::herdr::Herdr;
 use crate::init;
+use crate::no_mistakes::NoMistakes;
 use crate::paths::BulkheadPaths;
 use crate::repo;
 use crate::task;
@@ -63,6 +66,14 @@ pub enum Command {
         /// Task id.
         task_id: String,
     },
+    /// Merge an approved task and tear it down.
+    Land {
+        /// Task id.
+        task_id: String,
+        /// Confirm the captain approved this merge.
+        #[arg(long)]
+        approve: bool,
+    },
 }
 
 /// Parses arguments and runs the selected command.
@@ -76,6 +87,7 @@ pub fn run() -> Result<()> {
         Some(Command::Send { task_id, message }) => run_send(&task_id, &message),
         Some(Command::Status { task_id }) => run_status(task_id.as_deref()),
         Some(Command::Teardown { task_id }) => run_teardown(&task_id),
+        Some(Command::Land { task_id, approve }) => run_land(&task_id, approve),
         None => run_attach(Path::new(".")),
     }
 }
@@ -180,6 +192,27 @@ fn run_teardown(task_id: &str) -> Result<()> {
     let treehouse = Treehouse::from_env();
     task::teardown(&herdr, &treehouse, &paths, &repo.id, &TaskId::from(task_id))?;
     println!("tore down {task_id}");
+    Ok(())
+}
+
+fn run_land(task_id: &str, approve: bool) -> Result<()> {
+    let paths = BulkheadPaths::discover()?;
+    let repo = repo::detect(Path::new("."))?;
+    let herdr = Herdr::from_env();
+    let treehouse = Treehouse::from_env();
+    let ghaxi = GhAxi::from_env();
+    let no_mistakes = NoMistakes::from_env();
+    let landers = Landers {
+        herdr: &herdr,
+        treehouse: &treehouse,
+        ghaxi: &ghaxi,
+        no_mistakes: &no_mistakes,
+    };
+    let report = delivery::land(&paths, &landers, &repo.id, &TaskId::from(task_id), approve)?;
+    println!(
+        "landed {} ({:?}) -> {}",
+        report.task_id, report.mode, report.reference
+    );
     Ok(())
 }
 

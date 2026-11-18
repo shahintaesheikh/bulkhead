@@ -110,6 +110,8 @@ pub fn spawn(
         pane: pane.clone(),
         session: SessionRef::from(task_id.as_str()),
         pr_url: None,
+        base: None,
+        depends_on: None,
         created_at: now,
         updated_at: now,
     };
@@ -188,6 +190,18 @@ pub fn load_task(paths: &BulkheadPaths, repo: &RepoId, task_id: &TaskId) -> Resu
     let path = task_dir(paths, repo, task_id).join("meta.toml");
     let text = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
+}
+
+/// Writes a task's `meta.toml`, creating its folder if needed.
+pub fn save_task(
+    paths: &BulkheadPaths,
+    repo: &RepoId,
+    task_id: &TaskId,
+    task: &Task,
+) -> Result<()> {
+    let directory = task_dir(paths, repo, task_id);
+    fs::create_dir_all(&directory).with_context(|| format!("creating {}", directory.display()))?;
+    write_task(&directory, task)
 }
 
 fn write_task(directory: &Path, task: &Task) -> Result<()> {

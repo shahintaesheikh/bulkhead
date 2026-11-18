@@ -7,11 +7,15 @@
 pub mod agent_folder;
 pub mod attach;
 pub mod cli;
+pub mod config;
+pub mod delivery;
 pub mod doctor;
 pub mod fsx;
+pub mod ghaxi;
 pub mod herdr;
 pub mod home;
 pub mod init;
+pub mod no_mistakes;
 pub mod orchestrator;
 pub mod paths;
 pub mod registry;
