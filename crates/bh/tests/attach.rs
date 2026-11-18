@@ -97,6 +97,8 @@ fn attach_ensure_builds_layout_and_is_idempotent() {
         calls.contains("--session bulkhead agent start orch --kind pi --pane w1:p2"),
         "{calls}"
     );
+    assert!(calls.contains("--append-system-prompt"), "{calls}");
+    assert!(calls.contains("orchestrator-contract.md"), "{calls}");
 }
 
 #[test]

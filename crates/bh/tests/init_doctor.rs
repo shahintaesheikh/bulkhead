@@ -105,6 +105,8 @@ fn init_builds_layout_and_links_and_is_idempotent() {
     }
     assert!(agent.join("settings.json").is_file());
     assert!(agent.join("mcp.json").is_file());
+    assert!(agent.join("extensions/bulkhead-orch/index.ts").is_file());
+    assert!(agent.join("prompts/orchestrator-contract.md").is_file());
 
     let settings: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(agent.join("settings.json")).unwrap()).unwrap();

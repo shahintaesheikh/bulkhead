@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use bh_core::{PaneId, TabId, WorkspaceId};
 
 use crate::herdr::Herdr;
+use crate::orchestrator;
 use crate::paths::BulkheadPaths;
 use crate::registry;
 use crate::repo::DetectedRepo;
@@ -47,6 +48,11 @@ pub fn ensure(paths: &BulkheadPaths, herdr: &Herdr, repo: &DetectedRepo) -> Resu
         .get(&repo.id)
         .with_context(|| format!("{} is not registered; run `bh init` first", repo.id))?
         .clone();
+
+    // Keep the contract and extension in step with this binary.
+    orchestrator::install(paths, &repo.id)?;
+    let contract = orchestrator::contract_path(paths, &repo.id);
+    let orchestrator_args = orchestrator::launch_args(&contract);
 
     let started_server = if herdr.server_running()? {
         false
@@ -103,7 +109,7 @@ pub fn ensure(paths: &BulkheadPaths, herdr: &Herdr, repo: &DetectedRepo) -> Resu
     let started_orchestrator = if running {
         false
     } else {
-        herdr.start_agent(&pane, ORCH_AGENT_NAME, PI_KIND, &[])?;
+        herdr.start_agent(&pane, ORCH_AGENT_NAME, PI_KIND, &orchestrator_args)?;
         true
     };
 

@@ -166,7 +166,13 @@ impl Herdr {
     }
 
     /// Starts a recognized agent in an existing pane.
-    pub fn start_agent(&self, pane: &PaneId, name: &str, kind: &str, extra: &[&str]) -> Result<()> {
+    pub fn start_agent(
+        &self,
+        pane: &PaneId,
+        name: &str,
+        kind: &str,
+        extra: &[String],
+    ) -> Result<()> {
         let mut args = owned(&[
             "agent",
             "start",
@@ -178,7 +184,7 @@ impl Herdr {
         ]);
         if !extra.is_empty() {
             args.push("--".to_owned());
-            args.extend(extra.iter().map(|arg| (*arg).to_owned()));
+            args.extend(extra.iter().cloned());
         }
         self.run_ok(&args)
     }

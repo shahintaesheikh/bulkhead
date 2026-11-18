@@ -12,6 +12,7 @@ pub mod fsx;
 pub mod herdr;
 pub mod home;
 pub mod init;
+pub mod orchestrator;
 pub mod paths;
 pub mod registry;
 pub mod repo;

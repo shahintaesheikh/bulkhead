@@ -7,6 +7,7 @@ use bh_core::{DeliveryMode, RegistryEntry};
 
 use crate::agent_folder::{self, LinkOutcome};
 use crate::home;
+use crate::orchestrator;
 use crate::paths::BulkheadPaths;
 use crate::registry;
 use crate::repo::DetectedRepo;
@@ -41,6 +42,7 @@ pub fn init(paths: &BulkheadPaths, repo: &DetectedRepo) -> Result<InitReport> {
 
     home::create(paths, &repo.id)?;
     let links = agent_folder::build(paths, &repo.id)?;
+    orchestrator::install(paths, &repo.id)?;
 
     registry.repos.insert(
         repo.id.clone(),

@@ -8,7 +8,7 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 05: `bulkhead-orch` extension skeleton (contract via `--append-system-prompt`, `bh_*` tools shelling out to `bh`) and orchestrator contract v1 in `prompts/`.
+- Unit 06: `bh spawn`, `send`, `status`, `teardown`: treehouse claim, brief rendering, fresh pane launch with the repo's agent folder.
 
 ## Completed
 
@@ -17,6 +17,7 @@ Update this file after every meaningful implementation change.
 - Unit 02: `StatusLine`/`StatusLine::parse` with typed errors, `SupervisionState`/`RepoState`/`TaskState`, pure `classify(state, event)` with wake rules, status fixtures, parser and classifier tests. Spec: `specs/02-status-classifier.md`.
 - Unit 03: `bh` lib+bin split; `bh init` (git detection, slug, registry, repo home, generated `config.toml`/`settings.json`/`mcp.json`, global symlinks); `bh doctor` (registry, config, JSON, broken symlinks, stray `AGENTS.md`); temp-home integration tests. `RegistryEntry.workspace` is now `Option`. Spec: `specs/03-init-agent-folder.md`.
 - Unit 04: `bh::herdr::Herdr` CLI adapter (clean-env server start, workspace/tab/pane by id, typed JSON results); `bh::attach::ensure` (server → workspace → `orch` tab → orchestrator, workspace id persisted); `bh attach`/bare `bh`; `tests/fixtures/fake-herdr` scripted fake and integration tests. Spec: `specs/04-herdr-adapter.md`.
+- Unit 05: orchestrator contract v1 (`prompts/orchestrator-contract.md`); `bulkhead-orch` Pi extension registering nine `bh_*` tools via `pi.exec`; `bh::orchestrator` embeds contract + extension with `include_str!`, installs them on init/attach, and renders `--append-system-prompt`. Spec: `specs/05-orchestrator-extension.md`.
 
 ## In Progress
 
@@ -24,7 +25,7 @@ Update this file after every meaningful implementation change.
 
 ## Next Up
 
-- Unit 05: `bulkhead-orch` extension skeleton and orchestrator contract v1.
+- Unit 06: `bh spawn`/`send`/`status`/`teardown`.
 
 ## Open Questions
 
@@ -48,7 +49,10 @@ Update this file after every meaningful implementation change.
 - Unit 04 herdr recon: installed `herdr 0.9.5` reports **protocol 22** (context said 16+, satisfied); socket frames are JSON-RPC-like `request`/`success_response`/`error_response`/`subscription_event` per `herdr api schema`. Recorded in `specs/04-herdr-adapter.md`.
 - Unit 04 assumes `herdr --session <s> status server` does not print `status: running` (and exits non-zero) when the server is down; unverified live because stopping the real server is out of bounds. Confirm when a safe session exists.
 - Clean-env server start (`env_clear` + `PATH`/`HOME` + explicit child env) is enforced in code but not asserted by tests; add a live check once a disposable server can be started.
-- `bh attach` starts Pi with `herdr agent start orch --kind pi --pane <id>` and no extra args. Unit 05 must add the contract (`--append-system-prompt`) and extension wiring (`-e`).
+- Unit 05 fixed the earlier `--append-system-prompt` gap: `bh attach` now starts the orchestrator with `--append-system-prompt <repo>/agent/prompts/orchestrator-contract.md`; the extension is auto-discovered from `<repo>/agent/extensions/bulkhead-orch/index.ts` (no `-e`).
+- Confirm contract v1 wording, especially the authority table and dispatch policy; it is the prompt surface every later wake feeds into.
+- The nine `bh_*` tools exist before their subcommands (Units 06, 08). Confirm that is preferable to registering them only as their subcommands land.
+- Extension assets are embedded in the binary with `include_str!` and written into the repo agent folder rather than installed from a dist tree. Revisit when bulkhead ships prebuilt.
 
 ## Architecture Decisions
 
@@ -72,3 +76,4 @@ Update this file after every meaningful implementation change.
 - Unit 03 landed. `bh` is a lib+bin crate so integration tests can drive `init`/`doctor`; `BulkheadPaths` is injected, never discovered in tests. `bh init` links only present global files and generates per-repo `settings.json`/`mcp.json`; `bh doctor` reports errors but does not mutate. A manual CLI run against a temp home passed (`demo-repo` registered, doctor clean).
 - Unit 03 changed the Unit 01 `RegistryEntry.workspace` field to `Option<WorkspaceId>` (init runs before the herdr adapter exists). Flagged for review.
 - Unit 04 landed. All herdr access is by id; the fake herdr is Python and logs exact argument arrays. `bh attach` orchestrates but the interactive `exec` is untested (it replaces the process). 33 tests pass.
+- Unit 05 landed. `extensions/bulkhead-orch` typechecks with `tsc --noEmit` and loads under `pi -e ... --help`. Contract v1 and the extension are embedded in `bh` and written on init/attach so the installed copies match the binary. No socket or wake work yet.
