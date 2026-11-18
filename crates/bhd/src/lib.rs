@@ -1,9 +1,11 @@
 //! `bhd` library surface and runtime entry point.
 
 pub mod clock;
+pub mod config;
 pub mod core;
 pub mod herdr;
 pub mod paths;
+pub mod push;
 pub mod socket;
 pub mod source;
 pub mod wake_store;
@@ -48,7 +50,10 @@ pub async fn run(paths: Paths, batch: Duration) -> Result<()> {
     });
 
     let registry = paths::load_registry(&paths)?;
-    let mut core = Core::new(paths.clone(), &registry)?;
+    let mut core = Core::new(paths.clone(), &registry, push::Push::from_env())?;
+
+    let bh_bin = std::env::var_os("BULKHEAD_BH_BIN")
+        .map_or_else(|| std::path::PathBuf::from("bh"), std::path::PathBuf::from);
     let mut ticker = tokio::time::interval(batch);
     let mut shutdown = Box::pin(tokio::signal::ctrl_c());
 
@@ -63,6 +68,16 @@ pub async fn run(paths: Paths, batch: Duration) -> Result<()> {
             }
             _ = ticker.tick() => {
                 core.handle(SourceEvent::Tick)?;
+                for (repo, repo_path) in core.needs_revival() {
+                    core.note_revival(&repo)?;
+                    let bin = bh_bin.clone();
+                    tokio::task::spawn_blocking(move || {
+                        let _ = std::process::Command::new(bin)
+                            .arg("ensure")
+                            .arg(repo_path)
+                            .status();
+                    });
+                }
             }
             _ = &mut shutdown => {
                 break;

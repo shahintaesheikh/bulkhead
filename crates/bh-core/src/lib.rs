@@ -21,7 +21,7 @@ pub mod time;
 pub mod wake;
 
 pub use brief::{BriefContext, render as render_brief};
-pub use classify::{RepoState, SupervisionState, TaskState, classify};
+pub use classify::{RepoState, SupervisionState, TaskState, check_stalls, classify};
 pub use config::{AwayPolicy, DeliveryMode, Registry, RegistryEntry, RepoConfig};
 pub use event::Event;
 pub use ids::{PaneId, PlanId, RepoId, SessionRef, TabId, TaskId, WakeId, WorkspaceId};

@@ -8,7 +8,7 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 12: stall detection, away policy, return brief, phone push, `bhd` orchestrator revival, and the launchd plist.
+- Unit 13: backpass per-repo cadence and `bh ls` over herdr state.
 
 ## Completed
 
@@ -24,6 +24,7 @@ Update this file after every meaningful implementation change.
 - Unit 09: `bhd` lib+bin with `notify` watcher, durable per-repo `wakes.jsonl`, batcher, Unix socket server, synchronous `Core` loop, and the extension wake client (follow-up delivery, dedupe, reconnect). Pane env now carries `BULKHEAD_REPO`/`BULKHEAD_SOCKET`. Spec: `specs/09-bhd-daemon.md`.
 - Unit 10: `bhd::herdr` pane-agent-status subscription over the herdr socket plus a `herdr pane list` polling fallback; `SourceEvent::HerdrPane` and workspace-to-repo mapping in `Core`. Spec: `specs/10-herdr-events.md`.
 - Unit 11: `WakeKind::as_token`; `bhd` rolling `digest.md`; extension turn-end guard that defers wakes received mid-turn and acks at `agent_settled`; replay via reconnect. Spec: `specs/11-turnend-guard-digest.md`.
+- Unit 12: pure `check_stalls` and `TaskState.stalled`; bhd config loading and tick stalls; `Push` behind `BULKHEAD_PUSH_BIN`; `bh away on|off` with return brief; orchestrator revival via `bh ensure` with a 60s cooldown; `Event::OrchestratorGone`; launchd plist. Spec: `specs/12-stalls-away-revival.md`.
 
 ## In Progress
 
@@ -31,7 +32,7 @@ Update this file after every meaningful implementation change.
 
 ## Next Up
 
-- Unit 12: stall detection, away policy, push, revival, launchd.
+- Unit 13: backpass cadence and `bh ls`.
 
 ## Open Questions
 
@@ -74,6 +75,9 @@ Update this file after every meaningful implementation change.
 - The daemon restarts lose in-memory file offsets and seen-plan ids; on restart the first scan may re-read a status log from zero, producing duplicate wakes for old lines. A persisted per-file offset is a candidate for Unit 12.
 - Unit 11 acks at `agent_settled`, so a long turn keeps a wake pending and re-offered every batch; the extension dedupes. Confirm that is preferable to acking on delivery.
 - `digest.md` grows without bound; decide when/how the orchestrator compacts it.
+- Unit 12 push is a single command behind `BULKHEAD_PUSH_BIN`. Confirm the vendor and message shape.
+- Revival shells `bh ensure` from `bhd`; confirm `bh` is on the daemon's `PATH` (the launchd plist sets one) or pin it with `BULKHEAD_BH_BIN`.
+- The launchd plist has placeholder paths; fill them when the install location is decided.
 
 ## Architecture Decisions
 
@@ -104,3 +108,4 @@ Update this file after every meaningful implementation change.
 - Unit 09 landed. `bhd` watches every repo, records durable wakes before delivery, serves the extension socket, and batches about every 30s; the extension delivers wakes as follow-ups, dedupes on id and acks. 52 tests pass; tsc clean.
 - Unit 10 landed. `bhd` subscribes to herdr `pane.agent_status_changed` and falls back to polling `herdr pane list`; core maps workspace ids to repos.
 - Unit 11 landed. Wakes arriving mid-turn are deferred and acked at settle; `digest.md` records every wake. 53 tests pass; tsc clean.
+- Unit 12 landed. Stalls, away-mode with a return brief, a `BULKHEAD_PUSH_BIN` push channel, orchestrator revival and a launchd plist. 56 tests pass; tsc clean.

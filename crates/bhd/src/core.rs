@@ -9,19 +9,26 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use bh_core::protocol::{Envelope, ProtocolMessage};
 use bh_core::status::StatusLine;
 use bh_core::{
-    Event, PlanId, Registry, RepoId, SupervisionState, TaskId, Wake, WakeId, WorkspaceId,
+    Event, PlanId, Registry, RepoConfig, RepoId, SupervisionState, TaskId, Wake, WakeId,
+    WorkspaceId,
 };
 use tokio::sync::mpsc;
 
 use crate::clock;
+use crate::config;
 use crate::paths::Paths;
+use crate::push::Push;
 use crate::source::SourceEvent;
 use crate::wake_store::WakeStore;
+
+/// How long to wait before reviving the same orchestrator again.
+const REVIVAL_COOLDOWN: Duration = Duration::from_secs(60);
 
 /// The supervisor's state and its transitions.
 pub struct Core {
@@ -33,22 +40,35 @@ pub struct Core {
     seen_plans: BTreeSet<(RepoId, String)>,
     away: BTreeMap<RepoId, bool>,
     workspaces: BTreeMap<WorkspaceId, RepoId>,
+    configs: BTreeMap<RepoId, RepoConfig>,
+    repo_paths: BTreeMap<RepoId, PathBuf>,
+    revivable: BTreeSet<RepoId>,
+    revived: BTreeMap<RepoId, u64>,
+    push: Option<Push>,
 }
 
 impl Core {
-    /// Builds a core, rehydrating each repo's wake store.
-    pub fn new(paths: Paths, registry: &Registry) -> Result<Self> {
+    /// Builds a core, rehydrating each repo's wake store and config.
+    pub fn new(paths: Paths, registry: &Registry, push: Option<Push>) -> Result<Self> {
         let mut stores = BTreeMap::new();
         let mut workspaces = BTreeMap::new();
+        let mut configs = BTreeMap::new();
+        let mut repo_paths = BTreeMap::new();
+        let mut revivable = BTreeSet::new();
         let mut max_seq = 0;
+
         for (repo, entry) in &registry.repos {
             if let Some(workspace) = &entry.workspace {
                 workspaces.insert(workspace.clone(), repo.clone());
+                revivable.insert(repo.clone());
             }
             let store = WakeStore::load(paths.wakes_file(repo))?;
             max_seq = max_seq.max(store.max_seq());
             stores.insert(repo.clone(), store);
+            configs.insert(repo.clone(), config::load(&paths, repo));
+            repo_paths.insert(repo.clone(), entry.path.clone());
         }
+
         let mut state = SupervisionState::new();
         state.seed_wake_seq(max_seq);
         Ok(Self {
@@ -60,6 +80,11 @@ impl Core {
             seen_plans: BTreeSet::new(),
             away: BTreeMap::new(),
             workspaces,
+            configs,
+            repo_paths,
+            revivable,
+            revived: BTreeMap::new(),
+            push,
         })
     }
 
@@ -79,6 +104,7 @@ impl Core {
                 Ok(())
             }
             SourceEvent::Tick => {
+                self.detect_stalls()?;
                 self.deliver();
                 Ok(())
             }
@@ -179,7 +205,70 @@ impl Core {
 
     fn record(&mut self, wake: Wake) -> Result<()> {
         self.store_mut(&wake.repo)?.append(&wake)?;
-        self.append_digest(&wake)
+        self.append_digest(&wake)?;
+        self.maybe_push(&wake);
+        Ok(())
+    }
+
+    fn maybe_push(&self, wake: &Wake) {
+        let Some(push) = &self.push else {
+            return;
+        };
+        if !self.away.get(&wake.repo).copied().unwrap_or(false) {
+            return;
+        }
+        let enabled = self
+            .configs
+            .get(&wake.repo)
+            .map(|config| config.away.push)
+            .unwrap_or(true);
+        if enabled {
+            if let Err(error) = push.send(&wake.summary) {
+                tracing::warn!("push failed: {error}");
+            }
+        }
+    }
+
+    /// Reports repos whose orchestrator is not connected and may be revived.
+    pub fn needs_revival(&self) -> Vec<(RepoId, PathBuf)> {
+        let now = clock::now().as_secs();
+        let cooldown = REVIVAL_COOLDOWN.as_secs();
+        self.repo_paths
+            .iter()
+            .filter(|(repo, _)| {
+                self.revivable.contains(*repo)
+                    && !self.clients.contains_key(*repo)
+                    && self
+                        .revived
+                        .get(*repo)
+                        .is_none_or(|at| now.saturating_sub(*at) >= cooldown)
+            })
+            .map(|(repo, path)| (repo.clone(), path.clone()))
+            .collect()
+    }
+
+    /// Records that a repo's orchestrator is being restarted.
+    pub fn note_revival(&mut self, repo: &RepoId) -> Result<()> {
+        self.revived.insert(repo.clone(), clock::now().as_secs());
+        self.apply(Event::OrchestratorGone {
+            repo: repo.clone(),
+            at: clock::now(),
+        })
+    }
+
+    fn detect_stalls(&mut self) -> Result<()> {
+        let thresholds: BTreeMap<RepoId, bh_core::Seconds> = self
+            .configs
+            .iter()
+            .map(|(repo, config)| (repo.clone(), config.stall_after))
+            .collect();
+        let (state, wakes) =
+            bh_core::check_stalls(std::mem::take(&mut self.state), clock::now(), &thresholds);
+        self.state = state;
+        for wake in wakes {
+            self.record(wake)?;
+        }
+        Ok(())
     }
 
     /// Appends one line to the repo's rolling `digest.md`.

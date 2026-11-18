@@ -6,6 +6,7 @@
 
 pub mod agent_folder;
 pub mod attach;
+pub mod away;
 pub mod backlog;
 pub mod cli;
 pub mod clock;

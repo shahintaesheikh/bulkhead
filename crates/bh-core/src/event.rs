@@ -36,6 +36,12 @@ pub enum Event {
     },
     /// Away-mode toggled for a repo.
     AwayChanged { repo: RepoId, away: bool },
+    /// A repo's orchestrator was found missing and is being restarted.
+    OrchestratorGone {
+        repo: RepoId,
+        /// When the daemon noticed.
+        at: Timestamp,
+    },
     /// The extension acknowledged delivery of a wake.
     WakeAck { wake: WakeId },
     /// Periodic tick used for stall checks and wake batching.

@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""Scripted push channel for bulkhead tests."""
+
+import os
+import sys
+
+state = os.environ.get("FAKE_PUSH_STATE")
+if not state:
+    sys.stderr.write("fake-push: FAKE_PUSH_STATE is not set\n")
+    sys.exit(2)
+os.makedirs(state, exist_ok=True)
+with open(os.path.join(state, "calls.log"), "a") as handle:
+    handle.write(" ".join(sys.argv[1:]) + "\n")

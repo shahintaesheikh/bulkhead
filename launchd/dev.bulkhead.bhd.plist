@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd agent for bhd.
+
+  Replace __BHD_PATH__ with the absolute path to the bhd binary (for example
+  /opt/homebrew/bin/bhd or a release build's target/release/bhd) and __HOME__
+  with the captain's home directory, then:
+
+    cp launchd/dev.bulkhead.bhd.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.bulkhead.bhd.plist
+
+  KeepAlive restarts bhd if it exits. Logs land in ~/.bulkhead/run/.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.bulkhead.bhd</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__BHD_PATH__</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>__HOME__/.bulkhead/run/bhd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/.bulkhead/run/bhd.err.log</string>
+</dict>
+</plist>

@@ -11,6 +11,7 @@ use crate::event::Event;
 use crate::ids::{PaneId, PlanId, RepoId, TaskId, WakeId};
 use crate::pane::PaneState;
 use crate::status::StatusVerb;
+use crate::time::Seconds;
 use crate::time::Timestamp;
 use crate::wake::{Wake, WakeKind};
 
@@ -94,6 +95,8 @@ pub struct TaskState {
     pub last_verb: Option<StatusVerb>,
     /// When the most recent status line was observed.
     pub last_status_at: Option<Timestamp>,
+    /// Whether a stall wake has already been issued for this silence.
+    pub stalled: bool,
 }
 
 /// Applies one event and returns the next state plus any wakes it produced.
@@ -116,6 +119,7 @@ pub fn classify(mut state: SupervisionState, event: Event) -> (SupervisionState,
                     .or_default();
                 task_state.last_verb = Some(verb.clone());
                 task_state.last_status_at = Some(at);
+                task_state.stalled = false;
             }
             if let Some(kind) = wake_kind(&verb) {
                 let summary = format!("{task}: {} — {message}", verb.as_token());
@@ -139,9 +143,65 @@ pub fn classify(mut state: SupervisionState, event: Event) -> (SupervisionState,
         Event::AwayChanged { repo, away } => {
             state.ensure_repo(&repo).away = away;
         }
+        Event::OrchestratorGone { repo, at } => {
+            state.ensure_repo(&repo);
+            wakes.push(state.issue_wake(
+                &repo,
+                None,
+                WakeKind::OrchestratorRevived,
+                "orchestrator was down and has been restarted".to_owned(),
+                at,
+            ));
+        }
         Event::WakeAck { .. } | Event::Tick | Event::Shutdown => {}
     }
 
+    (state, wakes)
+}
+
+/// Emits at most one `TaskStalled` wake per silent window, per task.
+///
+/// A task is stalled when its last status is older than its repo's threshold
+/// and was not terminal. A new status line clears the flag.
+pub fn check_stalls(
+    mut state: SupervisionState,
+    now: Timestamp,
+    stall_after: &BTreeMap<RepoId, Seconds>,
+) -> (SupervisionState, Vec<Wake>) {
+    let mut stalled: Vec<(RepoId, TaskId, u64)> = Vec::new();
+
+    for (repo, repo_state) in state.repos.iter_mut() {
+        let Some(threshold) = stall_after.get(repo) else {
+            continue;
+        };
+        for (task, task_state) in repo_state.tasks.iter_mut() {
+            if task_state.stalled {
+                continue;
+            }
+            let Some(last) = task_state.last_status_at else {
+                continue;
+            };
+            if task_state
+                .last_verb
+                .as_ref()
+                .is_some_and(StatusVerb::is_terminal)
+            {
+                continue;
+            }
+            let silent = now.as_secs().saturating_sub(last.as_secs());
+            if silent < threshold.as_secs() {
+                continue;
+            }
+            task_state.stalled = true;
+            stalled.push((repo.clone(), task.clone(), threshold.as_secs()));
+        }
+    }
+
+    let mut wakes = Vec::new();
+    for (repo, task, seconds) in stalled {
+        let summary = format!("{task} stalled: no status for {seconds}s");
+        wakes.push(state.issue_wake(&repo, Some(&task), WakeKind::TaskStalled, summary, now));
+    }
     (state, wakes)
 }
 
@@ -173,13 +233,45 @@ mod tests {
     }
 
     fn status(verb: StatusVerb, message: &str) -> Event {
+        status_at(verb, message, at())
+    }
+
+    fn status_at(verb: StatusVerb, message: &str, at: Timestamp) -> Event {
         Event::StatusLine {
             repo: repo(),
             task: task(),
             verb,
             message: message.to_owned(),
-            at: at(),
+            at,
         }
+    }
+
+    #[test]
+    fn stalls_once_per_silent_window() {
+        let mut thresholds = BTreeMap::new();
+        thresholds.insert(repo(), Seconds::from_secs(100));
+
+        let (mut state, _) = classify(
+            SupervisionState::new(),
+            status_at(StatusVerb::Working, "go", Timestamp::from_secs(1_000)),
+        );
+
+        let (next, wakes) = check_stalls(state, Timestamp::from_secs(1_150), &thresholds);
+        state = next;
+        assert_eq!(wakes.len(), 1);
+        assert_eq!(wakes[0].kind, WakeKind::TaskStalled);
+
+        let (next, wakes) = check_stalls(state, Timestamp::from_secs(1_400), &thresholds);
+        state = next;
+        assert!(wakes.is_empty(), "a stall is reported once");
+
+        let (next, _) = classify(
+            state,
+            status_at(StatusVerb::Working, "again", Timestamp::from_secs(1_450)),
+        );
+        state = next;
+        let (_, wakes) = check_stalls(state, Timestamp::from_secs(1_600), &thresholds);
+        assert_eq!(wakes.len(), 1, "a new status re-arms the stall check");
     }
 
     #[test]

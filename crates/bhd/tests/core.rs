@@ -1,7 +1,7 @@
 //! Core loop integration tests: status and plan events become durable wakes.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use std::collections::BTreeMap;
 
@@ -11,6 +11,7 @@ use bh_core::{
 };
 use bhd::core::Core;
 use bhd::paths::Paths;
+use bhd::push::Push;
 use bhd::source::SourceEvent;
 use tokio::sync::mpsc;
 
@@ -37,6 +38,7 @@ fn setup() -> (tempfile::TempDir, Paths, RepoId, PathBuf) {
     let repo = RepoId::from("bulkhead");
     let task_dir = paths.repo_home(&repo).join("tasks/t-1");
     fs::create_dir_all(&task_dir).unwrap();
+    fs::create_dir_all(paths.state_dir(&repo)).unwrap();
     let log = task_dir.join("status.log");
     fs::write(&log, "").unwrap();
     (tmp, paths, repo, log)
@@ -45,7 +47,7 @@ fn setup() -> (tempfile::TempDir, Paths, RepoId, PathBuf) {
 #[tokio::test]
 async fn status_line_becomes_a_durable_delivered_wake() {
     let (_tmp, paths, repo, log) = setup();
-    let mut core = Core::new(paths.clone(), &registry(&repo)).unwrap();
+    let mut core = Core::new(paths.clone(), &registry(&repo), None).unwrap();
 
     let (client, mut received) = mpsc::unbounded_channel::<Envelope>();
     core.handle(SourceEvent::Connected {
@@ -89,7 +91,7 @@ async fn status_line_becomes_a_durable_delivered_wake() {
 #[tokio::test]
 async fn plan_arrival_wakes_only_once() {
     let (_tmp, paths, repo, _log) = setup();
-    let mut core = Core::new(paths.clone(), &registry(&repo)).unwrap();
+    let mut core = Core::new(paths.clone(), &registry(&repo), None).unwrap();
     let (client, mut received) = mpsc::unbounded_channel::<Envelope>();
     core.handle(SourceEvent::Connected {
         repo: repo.clone(),
@@ -126,7 +128,7 @@ async fn plan_arrival_wakes_only_once() {
 #[tokio::test]
 async fn herdr_pane_state_maps_to_the_repo_without_a_wake() {
     let (_tmp, paths, repo, _log) = setup();
-    let mut core = Core::new(paths.clone(), &registry(&repo)).unwrap();
+    let mut core = Core::new(paths.clone(), &registry(&repo), None).unwrap();
 
     core.handle(SourceEvent::HerdrPane {
         workspace: WorkspaceId::from("w1"),
@@ -148,4 +150,45 @@ async fn herdr_pane_state_maps_to_the_repo_without_a_wake() {
         state: PaneState::Done,
     })
     .unwrap();
+}
+
+fn fixture(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures")
+        .join(name)
+}
+
+#[tokio::test]
+async fn away_repo_pushes_wakes() {
+    let (_tmp, paths, repo, log) = setup();
+    let push_state = paths.home.join("push-state");
+    let push = Push::new(fixture("fake-push"))
+        .with_child_env("FAKE_PUSH_STATE", push_state.to_string_lossy().into_owned());
+    let mut core = Core::new(paths.clone(), &registry(&repo), Some(push)).unwrap();
+
+    let away = paths.state_dir(&repo).join("away.json");
+    fs::write(&away, "{}").unwrap();
+    core.handle(SourceEvent::Filesystem(vec![away])).unwrap();
+
+    fs::write(&log, "blocked: needs a key\n").unwrap();
+    core.handle(SourceEvent::Filesystem(vec![log])).unwrap();
+
+    let calls = fs::read_to_string(push_state.join("calls.log")).unwrap();
+    assert!(calls.contains("blocked"), "{calls}");
+}
+
+#[tokio::test]
+async fn orchestrator_is_flagged_for_revival_when_no_client_is_connected() {
+    let (_tmp, paths, repo, _log) = setup();
+    let mut core = Core::new(paths.clone(), &registry(&repo), None).unwrap();
+
+    let needs = core.needs_revival();
+    assert_eq!(needs.len(), 1);
+    assert_eq!(needs[0].0, repo);
+
+    core.note_revival(&repo).unwrap();
+    assert!(
+        core.needs_revival().is_empty(),
+        "a fresh revival is inside the cooldown"
+    );
 }

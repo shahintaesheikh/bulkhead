@@ -7,6 +7,7 @@ use bh_core::{PlanId, TaskId, TriageState};
 use clap::{Parser, Subcommand};
 
 use crate::attach;
+use crate::away;
 use crate::backlog;
 use crate::delivery::{self, Landers};
 use crate::doctor::{self, Level};
@@ -105,6 +106,17 @@ pub enum Command {
         #[arg(long)]
         list: bool,
     },
+    /// Toggle away-mode; `off` prints the return brief.
+    Away {
+        /// `on` or `off`.
+        mode: String,
+    },
+    /// Ensure the herdr workspace and orchestrator exist, without attaching.
+    Ensure {
+        /// A path inside the repo (default: the current directory).
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
 }
 
 /// Parses arguments and runs the selected command.
@@ -128,6 +140,8 @@ pub fn run() -> Result<()> {
             reason,
         }) => run_plan(path.as_deref(), list, accept, decline, supersede, reason),
         Some(Command::Task { ask, list }) => run_task(ask.as_deref(), list),
+        Some(Command::Away { mode }) => run_away(&mode),
+        Some(Command::Ensure { path }) => run_ensure(&path),
         None => run_attach(Path::new(".")),
     }
 }
@@ -335,6 +349,35 @@ fn run_task(ask: Option<&str>, list: bool) -> Result<()> {
     let ask = ask.context("provide an ask, or pass --list")?;
     let id = backlog::create(&paths, &repo.id, ask)?;
     println!("queued {id}");
+    Ok(())
+}
+
+fn run_away(mode: &str) -> Result<()> {
+    let paths = BulkheadPaths::discover()?;
+    let repo = repo::detect(Path::new("."))?;
+    match mode {
+        "on" => {
+            away::set(&paths, &repo.id, true)?;
+            println!("away-mode on for {}", repo.id);
+        }
+        "off" => {
+            away::set(&paths, &repo.id, false)?;
+            print!("{}", away::brief(&paths, &repo.id)?);
+        }
+        other => bail!("away expects `on` or `off`, got {other:?}"),
+    }
+    Ok(())
+}
+
+fn run_ensure(path: &Path) -> Result<()> {
+    let paths = BulkheadPaths::discover()?;
+    let repo = repo::detect(path)?;
+    let herdr = Herdr::from_env();
+    let plan = attach::ensure(&paths, &herdr, &repo)?;
+    println!(
+        "ensured {} (workspace {}, tab {}, pane {})",
+        repo.id, plan.workspace, plan.tab, plan.pane
+    );
     Ok(())
 }
 
