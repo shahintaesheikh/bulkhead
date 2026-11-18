@@ -1,0 +1,16 @@
+[workspace]
+resolver = "3"
+members = ["crates/bh-core", "crates/bhd", "crates/bh"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+
+[workspace.dependencies]
+bh-core = { path = "crates/bh-core" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+toml = "0.8"
