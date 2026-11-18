@@ -62,7 +62,13 @@ pub fn ensure(paths: &BulkheadPaths, herdr: &Herdr, repo: &DetectedRepo) -> Resu
     };
 
     let agent_dir = paths.agent_dir(&repo.id).to_string_lossy().into_owned();
-    let env = [("PI_CODING_AGENT_DIR", agent_dir.as_str())];
+    let socket = paths.socket_file().to_string_lossy().into_owned();
+    let repo_id = repo.id.to_string();
+    let env = [
+        ("PI_CODING_AGENT_DIR", agent_dir.as_str()),
+        ("BULKHEAD_REPO", repo_id.as_str()),
+        ("BULKHEAD_SOCKET", socket.as_str()),
+    ];
 
     let workspaces = herdr.list_workspaces()?;
     let existing = entry

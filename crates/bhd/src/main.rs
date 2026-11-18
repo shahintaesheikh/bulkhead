@@ -1,14 +1,21 @@
 //! `bhd`: the bulkhead supervisor daemon.
-//!
-//! Unit 01 lands the stub only. The tokio loop, event sources and socket server
-//! arrive in later units; this binary exists so the workspace and protocol
-//! version are exercised end to end.
 
-fn main() {
-    println!(
-        "bhd {} (protocol {}.{})",
-        env!("CARGO_PKG_VERSION"),
-        bh_core::protocol::PROTOCOL_MAJOR,
-        bh_core::protocol::PROTOCOL_MINOR,
+use std::time::Duration;
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt().with_target(false).init();
+
+    let paths = bhd::paths::Paths::discover()?;
+    let batch = std::env::var("BULKHEAD_BATCH_SECS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(Duration::from_secs)
+        .unwrap_or(Duration::from_secs(30));
+
+    tracing::info!(
+        "bhd starting (home {}, batch {batch:?})",
+        paths.home.display()
     );
+    bhd::run(paths, batch).await
 }

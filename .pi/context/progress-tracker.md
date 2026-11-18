@@ -8,7 +8,7 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- Unit 09: `bhd` skeleton — tokio loop, `notify` sources for status logs and inboxes, durable `wakes.jsonl`, batcher, Unix socket server, and the extension client delivering follow-ups with dedupe.
+- Unit 10: herdr pane-event subscription in `bhd`, with a polling fallback.
 
 ## Completed
 
@@ -21,6 +21,7 @@ Update this file after every meaningful implementation change.
 - Unit 06: `prompts/crew-brief.md` and pure `bh-core::brief`; `bh::treehouse` (claim/release) and `tests/fixtures/fake-treehouse`; `bh::task` spawn/send/status/teardown; `Herdr::prompt_agent`/`close_tab`; `bh spawn|send|status|teardown`; round-trip integration test. Spec: `specs/06-crew-lifecycle.md`.
 - Unit 07: `bh::config`; `bh::ghaxi::GhAxi` and `bh::no_mistakes::NoMistakes` adapters; `bh::delivery::land` with approval gate, three modes, `depends_on` stacking and teardown; `bh land`; fakes and tests. `bh_core::Task` gained `base`/`depends_on`. Spec: `specs/07-delivery-land.md`.
 - Unit 08: `bh-core::frontmatter` and `bh-core::plan`; `bh::plan` (ingest/triage across inbox/accepted/declined), `bh::backlog`, `bh::lavish::LavishAxi`; `bh plan` and `bh task`; `prompts/triage-rules.md` installed with the contract; `bh_plan` tool extended to triage. Spec: `specs/08-plan-task-triage.md`.
+- Unit 09: `bhd` lib+bin with `notify` watcher, durable per-repo `wakes.jsonl`, batcher, Unix socket server, synchronous `Core` loop, and the extension wake client (follow-up delivery, dedupe, reconnect). Pane env now carries `BULKHEAD_REPO`/`BULKHEAD_SOCKET`. Spec: `specs/09-bhd-daemon.md`.
 
 ## In Progress
 
@@ -28,7 +29,7 @@ Update this file after every meaningful implementation change.
 
 ## Next Up
 
-- Unit 09: `bhd` daemon skeleton and wake delivery.
+- Unit 10: herdr pane-event subscription with polling fallback.
 
 ## Open Questions
 
@@ -65,7 +66,10 @@ Update this file after every meaningful implementation change.
 - Stacked delivery lands dependencies recursively and then tears each down. Confirm the captain approves a whole stack with one `--approve`, and that `base` should be set at spawn (currently it is only recorded).
 - Unit 08 assumed the lavish-axi CLI: `publish <path>` prints a review URL and `poll <review>` prints feedback. Confirm against the real tool.
 - Frontmatter is a flat `key: value` subset, not full YAML. Confirm no managed file needs lists or nesting.
-- Plans are triaged with `bh plan --accept/--decline/--supersede`; the inbox watcher and lavish poll loop are deferred to Units 09/12.
+- Plans are triaged with `bh plan --accept/--decline/--supersede`; the inbox watcher is in `bhd` (Unit 09) and the lavish poll loop is deferred to Unit 12.
+- Unit 09 duplicates the `~/.bulkhead` path layout in `bh::paths` and `bhd::paths`. Consider a shared `bh-core` path module once the layout settles.
+- `bhd` re-offers every pending wake on each batch tick until acked. Confirm the 30s cadence is acceptable, or add a per-wake retry backoff in Unit 12.
+- The daemon restarts lose in-memory file offsets and seen-plan ids; on restart the first scan may re-read a status log from zero, producing duplicate wakes for old lines. A persisted per-file offset is a candidate for Unit 11.
 
 ## Architecture Decisions
 
@@ -93,3 +97,4 @@ Update this file after every meaningful implementation change.
 - Unit 06 landed. Crew lifecycle is wired end to end against fakes: spawn claims a worktree, renders the brief, starts Pi in a tab with the repo agent folder, and records meta.toml; send/status/teardown round-trip. 36 tests pass.
 - Unit 07 landed. `bh land` gates on explicit approval (or `yolo`/`local`), merges via gh-axi or no-mistakes, lands `depends_on` first, and tears down. 40 tests pass.
 - Unit 08 landed. Plan intake and triage and backlog creation are wired; HTML plans get a lavish review URL; triage rules ship with the contract. 47 tests pass; tsc clean.
+- Unit 09 landed. `bhd` watches every repo, records durable wakes before delivery, serves the extension socket, and batches about every 30s; the extension delivers wakes as follow-ups, dedupes on id and acks. 52 tests pass; tsc clean.

@@ -8,17 +8,25 @@
  * Tested against Pi 1.5.0. Pi APIs used (see extensions.md):
  *   - `pi.registerTool()` for the `bh_*` tools.
  *   - `pi.exec()` to run `bh` without a shell.
+ *   - `pi.sendUserMessage(text, { deliverAs: "followUp" })` to deliver wakes.
+ *   - `pi.on("session_shutdown")` to close the socket.
  *
- * Wake delivery and the turn-end guard arrive in later units.
+ * The wake protocol is version 1.x; both sides refuse another major. The
+turn-end guard arrives in a later unit.
  */
+import { connect, type Socket } from "node:net";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type, type TSchema } from "typebox";
 
 const BH_BIN = process.env.BULKHEAD_BH_BIN ?? "bh";
+const PROTOCOL_MAJOR = 1;
+const PROTOCOL_MINOR = 0;
+const RECONNECT_MS = 2000;
 
 export default function bulkheadOrch(pi: ExtensionAPI): void {
   registerBhTools(pi);
+  startWakeClient(pi);
 }
 
 function registerBhTools(pi: ExtensionAPI): void {
@@ -162,4 +170,117 @@ function registerBhTools(pi: ExtensionAPI): void {
     Type.Object({}),
     () => ["ls"],
   );
+}
+
+interface Wake {
+  id: string;
+  repo: string;
+  task?: string | null;
+  kind: string;
+  summary: string;
+  created_at: number;
+}
+
+interface Envelope {
+  version: { major: number; minor: number };
+  message: { type: string; [key: string]: unknown };
+}
+
+/**
+ * Connects to bhd, delivers wakes as follow-up messages, and acknowledges them.
+ *
+ * Wakes are deduped on id, so an at-least-once redelivery is delivered once.
+ * A missing socket is not an error: the extension simply runs without a daemon.
+ */
+function startWakeClient(pi: ExtensionAPI): void {
+  const socketPath = process.env.BULKHEAD_SOCKET;
+  const repo = process.env.BULKHEAD_REPO;
+  if (!socketPath || !repo) {
+    return;
+  }
+
+  const delivered = new Set<string>();
+  let socket: Socket | undefined;
+  let buffer = "";
+  let closed = false;
+
+  const send = (message: Record<string, unknown>): void => {
+    if (!socket || socket.destroyed) {
+      return;
+    }
+    socket.write(
+      JSON.stringify({
+        version: { major: PROTOCOL_MAJOR, minor: PROTOCOL_MINOR },
+        message,
+      }) + "\n",
+    );
+  };
+
+  const handle = (envelope: Envelope): void => {
+    if (envelope.version.major !== PROTOCOL_MAJOR) {
+      return;
+    }
+    if (envelope.message.type !== "wake") {
+      return;
+    }
+
+    const wake = envelope.message.wake as Wake | undefined;
+    if (!wake) {
+      return;
+    }
+    if (delivered.has(wake.id)) {
+      send({ type: "ack", wake: wake.id });
+      return;
+    }
+
+    delivered.add(wake.id);
+    try {
+      pi.sendUserMessage(wake.summary, { deliverAs: "followUp" });
+    } catch {
+      delivered.delete(wake.id);
+      return;
+    }
+    send({ type: "ack", wake: wake.id });
+  };
+
+  const connectOnce = (): void => {
+    if (closed) {
+      return;
+    }
+    socket = connect(socketPath);
+    socket.setEncoding("utf8");
+    socket.on("connect", () => send({ type: "hello", repo, pid: process.pid }));
+    socket.on("data", (chunk: string) => {
+      buffer += chunk;
+      let index = buffer.indexOf("\n");
+      while (index >= 0) {
+        const line = buffer.slice(0, index);
+        buffer = buffer.slice(index + 1);
+        index = buffer.indexOf("\n");
+        if (line.trim() === "") {
+          continue;
+        }
+        try {
+          handle(JSON.parse(line) as Envelope);
+        } catch {
+          // Ignore a malformed frame; bhd redelivers on the next batch.
+        }
+      }
+    });
+    socket.on("error", () => {
+      // The close handler schedules a reconnect.
+    });
+    socket.on("close", () => {
+      if (!closed) {
+        setTimeout(connectOnce, RECONNECT_MS);
+      }
+    });
+  };
+
+  connectOnce();
+
+  pi.on("session_shutdown", async () => {
+    closed = true;
+    socket?.destroy();
+  });
 }

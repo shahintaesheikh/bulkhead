@@ -51,6 +51,11 @@ impl BulkheadPaths {
         self.home.join("run")
     }
 
+    /// `~/.bulkhead/run/bhd.sock`.
+    pub fn socket_file(&self) -> PathBuf {
+        self.run_dir().join("bhd.sock")
+    }
+
     /// `~/.bulkhead/<repo-id>/`.
     pub fn repo_home(&self, repo: &RepoId) -> PathBuf {
         self.home.join(repo.as_str())
